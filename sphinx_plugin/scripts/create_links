@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+print_help() {
+	echo "Usage: create_links PATH_TO_SPHINX_PLUGIN [PATH_TO_PHPBB]"
+	exit 1
+}
+
+plugin_path="$1"
+phpbb_path="$2"
+
+if [ "$1" = "--help" -o "$1" = "-h" ]; then
+	print_help
+fi
+
+if [ "$plugin_path" == "" ]; then
+	plugin_path="."
+fi
+
+if [ "$phpbb_path" == "" ]; then
+	phpbb_path="."
+fi
+
+if [ ! -e "$phpbb_path" ]; then
+	echo "Could not find $phpbb_path"
+	print_help
+fi
+
+if [ ! -e "$plugin_path" ]; then
+	echo "Could not find $plugin_path"
+	print_help
+fi
+
+absolute_plugin_path=`cd $plugin_path; pwd;`
+
+checkdirs=("includes" "includes/search" "language/en/mods")
+n=${#checkdirs[@]}
+i=0
+while [ "$i" -lt "$n" ]; do
+	dir="$phpbb_path/${checkdirs[$i]}"
+	if [ ! -e "$dir" ]; then
+		echo "Could not find $dir"
+		print_help
+	fi
+	dir="$absolute_plugin_path/${checkdirs[$i]}"
+	if [ ! -e "$dir" ]; then
+		echo "Could not find $dir"
+		print_help
+	fi
+	let "i = $i + 1"
+done
+
+files=("includes/sphinxapi.php" "includes/functions_sphinx.php" "includes/search/fulltext_sphinx.php" "language/en/mods/fulltext_sphinx.php")
+n=${#files[@]}
+i=0
+while [ "$i" -lt "$n" ]; do
+	file="${files[$i]}"
+	ln -vs "$absolute_plugin_path/$file" "$phpbb_path/$file"
+	let "i = $i + 1"
+done
