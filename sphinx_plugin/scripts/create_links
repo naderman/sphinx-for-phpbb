@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 
 print_help() {
-	echo "Usage: create_links PATH_TO_SPHINX_PLUGIN [PATH_TO_PHPBB]"
+	echo "Usage: create_links PATH_TO_PHPBB [PATH_TO_SPHINX_PLUGIN]"
 	exit 1
 }
 
-plugin_path="$1"
-phpbb_path="$2"
+plugin_path="$2"
+phpbb_path="$1"
 
-if [ "$1" = "--help" -o "$1" = "-h" ]; then
+if [ "$1" = "--help" -o "$1" = "-h" -o "$1" == "" ]; then
 	print_help
 fi
 
