@@ -506,7 +506,7 @@ class fulltext_sphinx extends search_backend
 
 		$this->sphinx->SetLimits($start, (int) $config['search_block_size']);
 		$result = $this->sphinx->Query($this->search_query);
-		$id_ary = array();var_dump($result);
+		$id_ary = array();
 		if (isset($result['matches']))
 		{
 			if ($type == 'posts')
