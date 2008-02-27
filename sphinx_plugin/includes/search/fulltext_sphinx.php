@@ -65,7 +65,7 @@ class fulltext_sphinx extends search_backend
 				chdir($cwd);
 			}
 			$this->sphinx = new SphinxClient ();
-			$this->sphinx->SetServer("localhost", (isset($config['fulltext_sphinx_port']) && $config['fulltext_sphinx_port']) ? $config['fulltext_sphinx_port'] : 3312); // we only support localhost for now
+			$this->sphinx->SetServer("localhost", (isset($config['fulltext_sphinx_port']) && $config['fulltext_sphinx_port']) ? (int) $config['fulltext_sphinx_port'] : 3312); // we only support localhost for now
 		}
 
 		$config['fulltext_sphinx_min_word_len'] = 2;
