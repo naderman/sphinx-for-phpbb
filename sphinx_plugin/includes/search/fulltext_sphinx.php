@@ -56,12 +56,12 @@ class fulltext_sphinx extends search_backend
 
 		if ($config['fulltext_sphinx_bin_path'])
 		{
-			if (!file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
+			if (!file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid') && $this->index_created(false))
 			{
-				// todo: unlink all data/*.spl files
+				$this->shutdown_searchd();
 				$cwd = getcwd();
 				chdir($config['fulltext_sphinx_bin_path']);
-				exec('./' . SEARCHD_NAME . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf >> ' . $config['fulltext_sphinx_config_path'] . 'log/searchd-startup.log 2>&1 &');
+				exec('./' . SEARCHD_NAME . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf >> ' . $config['fulltext_sphinx_data_path'] . 'log/searchd-startup.log 2>&1 &');
 				chdir($cwd);
 			}
 			$this->sphinx = new SphinxClient ();
@@ -505,7 +505,7 @@ class fulltext_sphinx extends search_backend
 		}
 
 		$this->sphinx->SetLimits($start, (int) $config['search_block_size']);
-		$result = $this->sphinx->Query($this->search_query);
+		$result = $this->sphinx->Query(str_replace('&quot;', '"', $this->search_query));
 		$id_ary = array();
 		if (isset($result['matches']))
 		{
@@ -813,11 +813,11 @@ class fulltext_sphinx extends search_backend
 
 		if ($this->index_created())
 		{
-			$rotate = (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid')) ? ' --rotate' : '';
+			$rotate = ($this->searchd_running()) ? ' --rotate' : '';
 	
 			$cwd = getcwd();
 			chdir($config['fulltext_sphinx_bin_path']);
-			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_config_path'] . 'log/indexer.log 2>&1 &');
+			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
 			chdir($cwd);
 		}
 
@@ -835,21 +835,21 @@ class fulltext_sphinx extends search_backend
 	/**
 	* Destroy old cache entries
 	*/
-	function tidy()
+	function tidy($create = false)
 	{
 		global $db, $config, $phpbb_root_path;
 
 		// destroy too old cached search results
 		$this->destroy_cache(array());
 
-		if ($this->index_created())
+		if ($this->index_created() || $create)
 		{
-			$rotate = (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid')) ? ' --rotate' : '';
+			$rotate = ($this->searchd_running()) ? ' --rotate' : '';
 	
 			$cwd = getcwd();
 			chdir($config['fulltext_sphinx_bin_path']);
-			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_main >> ' . $config['fulltext_sphinx_config_path'] . 'log/indexer.log 2>&1 &');
-			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_config_path'] . 'log/indexer.log 2>&1 &');
+			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_main >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
+			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
 			chdir($cwd);
 		}
 
@@ -863,15 +863,25 @@ class fulltext_sphinx extends search_backend
 	{
 		global $db;
 
-		$sql = 'CREATE TABLE ' . SPHINX_TABLE . ' (
-			counter_id INT NOT NULL PRIMARY KEY,
-			max_doc_id INT NOT NULL
-		)';
+		$this->shutdown_searchd();
 
-		// return false if it was successful
-		$db->sql_query($sql);
+		if (!$this->index_created())
+		{
+			$sql = 'CREATE TABLE IF NOT EXISTS ' . SPHINX_TABLE . ' (
+				counter_id INT NOT NULL PRIMARY KEY,
+				max_doc_id INT NOT NULL
+			)';
+			$db->sql_query($sql);
 
-		$this->tidy();
+			$sql = 'TRUNCATE TABLE ' . SPHINX_TABLE;
+			$db->sql_query($sql);
+		}
+
+		// start indexing process
+		$this->tidy(true);
+
+		$this->shutdown_searchd();
+
 		return false;
 	}
 
@@ -880,27 +890,89 @@ class fulltext_sphinx extends search_backend
 	*/
 	function delete_index($acp_module, $u_action)
 	{
-		global $db;
-		$sql = 'DROP TABLE ' . SPHINX_TABLE;
+		global $db, $config;
 
-		//return false if it succeeded
-		return !$db->sql_query($sql);
+		$this->shutdown_searchd();
+
+		sphinx_unlink_by_pattern($config['fulltext_sphinx_data_path'], '#^index_phpbb_' . $this->id . '.*$#');
+
+		if (!$this->index_created())
+		{
+			return false;
+		}
+
+		$sql = 'DROP TABLE ' . SPHINX_TABLE;
+		$db->sql_query($sql);
+
+		$this->shutdown_searchd();
+
+		return false;
 	}
 
 	/**
 	* Returns true if the sphinx table was created
 	*/
-	function index_created()
+	function index_created($allow_new_files = true)
 	{
-		global $db;
+		global $db, $config;
 
 		$sql = 'SHOW TABLES LIKE \'' . SPHINX_TABLE . '\'';
 		$result = $db->sql_query($sql);
 
 		if ($db->sql_fetchrow($result))
 		{
-			return true;
+			if ((file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.spd') && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.spd')) || ($allow_new_files && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.new.spd') && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.new.spd')))
+			{
+				return true;
+			}
 		}
+
+		return false;
+	}
+
+	/**
+	* Kills the searchd process and makes sure there's no locks left over
+	*/
+	function shutdown_searchd()
+	{
+		global $config;
+
+		exec('killall -9 searchd >> /dev/null 2>&1 &');
+		
+		if (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
+		{
+			unlink($config['fulltext_sphinx_data_path'] . 'searchd.pid');
+		}
+
+		sphinx_unlink_by_pattern($config['fulltext_sphinx_data_path'], '#^.*\.spl$#');
+	}
+
+	/**
+	* Checks whether searchd is running, if it's not running it makes sure there's no left over
+	* files by calling shutdown_searchd.
+	*
+	* @return	boolean	Whether searchd is running or not
+	*/
+	function searchd_running()
+	{
+		global $config;
+
+		if (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
+		{
+			$pid = file_get_contents($config['fulltext_sphinx_data_path'] . 'searchd.pid');
+			if ($pid)
+			{
+				$output = array();
+				exec('pidof searchd', $output);
+				if ($output && $output[0] == $pid)
+				{
+					return true;
+				}
+			}
+		}
+
+		// make sure it's really not running
+		$this->shutdown_searchd();
 
 		return false;
 	}
@@ -923,21 +995,25 @@ class fulltext_sphinx extends search_backend
 			$user->lang['FULLTEXT_SPHINX_MAIN_POSTS']			=> ($this->index_created()) ? $this->stats['main_posts'] : 0,
 			$user->lang['FULLTEXT_SPHINX_DELTA_POSTS']			=> ($this->index_created()) ? $this->stats['total_posts'] - $this->stats['main_posts'] : 0,
 			$user->lang['FULLTEXT_MYSQL_TOTAL_POSTS']			=> ($this->index_created()) ? $this->stats['total_posts'] : 0,
+			$user->lang['FULLTEXT_SPHINX_LAST_SEARCHES']		=> nl2br($this->stats['last_searches']),
 		);
 	}
 
+	/**
+	* Collects stats that can be displayed on the index maintenance page
+	*/
 	function get_stats()
 	{
-		global $db;
-
-		$sql = 'SELECT COUNT(post_id) as total_posts
-			FROM ' . POSTS_TABLE;
-		$result = $db->sql_query($sql);
-		$this->stats['total_posts'] = (int) $db->sql_fetchfield('total_posts');
-		$db->sql_freeresult($result);
+		global $db, $config;
 
 		if ($this->index_created())
 		{
+			$sql = 'SELECT COUNT(post_id) as total_posts
+				FROM ' . POSTS_TABLE;
+			$result = $db->sql_query($sql);
+			$this->stats['total_posts'] = (int) $db->sql_fetchfield('total_posts');
+			$db->sql_freeresult($result);
+
 			$sql = 'SELECT COUNT(p.post_id) as main_posts
 				FROM ' . POSTS_TABLE . ' p, ' . SPHINX_TABLE . ' m
 				WHERE p.post_id <= m.max_doc_id
@@ -945,6 +1021,12 @@ class fulltext_sphinx extends search_backend
 			$result = $db->sql_query($sql);
 			$this->stats['main_posts'] = (int) $db->sql_fetchfield('main_posts');
 			$db->sql_freeresult($result);
+		}
+
+		$this->stats['last_searches'] = '';
+		if (file_exists($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log'))
+		{
+			$this->stats['last_searches'] = utf8_htmlspecialchars(sphinx_read_last_lines($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log', 3));
 		}
 	}
 
@@ -1038,5 +1120,54 @@ class fulltext_sphinx extends search_backend
 		);
 	}
 }
+
+/**
+* Deletes all files from a directory that match a certain pattern
+*
+* @param	string	$path		Path from which files shall be deleted
+* @param	string	$pattern	PCRE pattern that a file needs to match in order to be deleted
+*/
+function sphinx_unlink_by_pattern($path, $pattern)
+{
+	$dir = opendir($path);
+	while (false !== ($file = readdir($dir)))
+	{
+		if (is_file($path . $file) && preg_match($pattern, $file))
+		{
+			unlink($path . $file);
+		}
+	}
+}
+
+/**
+* Reads the last from a file
+*
+* @param	string	$file		The filename from which the lines shall be read
+* @param	int		$amount		The number of lines to be read from the end
+* @return	string				Last lines of the file
+*/
+function sphinx_read_last_lines($file, $amount)
+{
+	$fp = fopen($file, 'r');
+	fseek($fp, 0, SEEK_END);
+
+	$c = '';
+	$i = 0;
+
+	while ($i < $amount)
+	{
+		fseek($fp, -2, SEEK_CUR);
+		$c = fgetc($fp);
+		if ($c == "\n")
+		{
+			$i++;
+		}
+	}
+
+	$string = fread($fp, 8192);
+	fclose($fp);
+
+	return $string;
+} 
 
 ?>

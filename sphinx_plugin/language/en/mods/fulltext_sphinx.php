@@ -47,6 +47,7 @@ $lang = array_merge($lang, array(
 	'FULLTEXT_SPHINX_WRONG_DATABASE'		=> 'The sphinx plugin for phpBB currently only supports MySQL',
 	'FULLTEXT_SPHINX_MAIN_POSTS'			=> 'Number of posts in main index',
 	'FULLTEXT_SPHINX_DELTA_POSTS'			=> 'Number of posts in frequently updated delta index',
+	'FULLTEXT_SPHINX_LAST_SEARCHES'		=> 'Recent search queries',
 ));
 
 ?>
