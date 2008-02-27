@@ -61,7 +61,7 @@ class fulltext_sphinx extends search_backend
 				// todo: unlink all data/*.spl files
 				$cwd = getcwd();
 				chdir($config['fulltext_sphinx_bin_path']);
-				exec('./' . SEARCHD_NAME . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf > /dev/null 2>&1 &');
+				exec('./' . SEARCHD_NAME . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf >> ' . $config['fulltext_sphinx_config_path'] . 'log/searchd-startup.log 2>&1 &');
 				chdir($cwd);
 			}
 			$this->sphinx = new SphinxClient ();
@@ -817,7 +817,7 @@ class fulltext_sphinx extends search_backend
 	
 			$cwd = getcwd();
 			chdir($config['fulltext_sphinx_bin_path']);
-			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta > /dev/null 2>&1 &');
+			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_config_path'] . 'log/indexer.log 2>&1 &');
 			chdir($cwd);
 		}
 
@@ -848,8 +848,8 @@ class fulltext_sphinx extends search_backend
 	
 			$cwd = getcwd();
 			chdir($config['fulltext_sphinx_bin_path']);
-			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_main > /dev/null 2>&1 &');
-			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta > /dev/null 2>&1 &');
+			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_main >> ' . $config['fulltext_sphinx_config_path'] . 'log/indexer.log 2>&1 &');
+			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_config_path'] . 'log/indexer.log 2>&1 &');
 			chdir($cwd);
 		}
 
