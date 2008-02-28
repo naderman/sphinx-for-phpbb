@@ -56,7 +56,7 @@ class fulltext_sphinx extends search_backend
 
 		$this->sphinx = new SphinxClient ();
 
-		if ($config['fulltext_sphinx_bin_path'])
+		if (isset($config['fulltext_sphinx_configured']) && $config['fulltext_sphinx_configured'])
 		{
 			if (!file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid') && $this->index_created(false))
 			{
@@ -319,6 +319,8 @@ class fulltext_sphinx extends search_backend
 		}
 
 		$config_object->write($config['fulltext_sphinx_config_path'] . 'sphinx.conf');
+
+		set_config('fulltext_sphinx_configured', '1');
 
 		return false;
 	}
@@ -862,9 +864,16 @@ class fulltext_sphinx extends search_backend
 	*/
 	function create_index($acp_module, $u_action)
 	{
-		global $db;
+		global $db, $user, $config;
 
 		$this->shutdown_searchd();
+
+		if (!isset($config['fulltext_sphinx_configured']) || !$config['fulltext_sphinx_configured'])
+		{
+			$user->add_lang('mods/fulltext_sphinx');
+
+			return $user->lang['FULLTEXT_SPHINX_CONFIGURE_FIRST'];
+		}
 
 		if (!$this->index_created())
 		{
