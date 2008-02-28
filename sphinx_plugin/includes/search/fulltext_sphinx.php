@@ -54,6 +54,8 @@ class fulltext_sphinx extends search_backend
 
 		$this->id = $config['avatar_salt'];
 
+		$this->sphinx = new SphinxClient ();
+
 		if ($config['fulltext_sphinx_bin_path'])
 		{
 			if (!file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid') && $this->index_created(false))
@@ -64,7 +66,6 @@ class fulltext_sphinx extends search_backend
 				exec('./' . SEARCHD_NAME . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf >> ' . $config['fulltext_sphinx_data_path'] . 'log/searchd-startup.log 2>&1 &');
 				chdir($cwd);
 			}
-			$this->sphinx = new SphinxClient ();
 			$this->sphinx->SetServer("localhost", (isset($config['fulltext_sphinx_port']) && $config['fulltext_sphinx_port']) ? (int) $config['fulltext_sphinx_port'] : 3312); // we only support localhost for now
 		}
 
