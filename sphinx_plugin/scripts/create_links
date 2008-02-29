@@ -13,7 +13,7 @@ if [ "$1" = "--help" -o "$1" = "-h" -o "$1" == "" ]; then
 fi
 
 if [ "$plugin_path" == "" ]; then
-	plugin_path="."
+	plugin_path="../"
 fi
 
 if [ "$phpbb_path" == "" ]; then
