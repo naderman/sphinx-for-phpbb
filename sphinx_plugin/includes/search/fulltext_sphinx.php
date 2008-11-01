@@ -1007,7 +1007,7 @@ class fulltext_sphinx
 			}
 			else if (file_exists('/usr/bin/' . INDEXER_NAME) && file_exists('/usr/bin/' . SEARCHD_NAME))
 			{
-				$bin_path = '/usr/local/bin/';
+				$bin_path = '/usr/bin/';
 			}
 			else
 			{
