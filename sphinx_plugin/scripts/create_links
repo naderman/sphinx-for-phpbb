@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+checkdirs=("includes" "includes/search" "language/en/mods")
+files=("includes/sphinxapi-0.9.8.php" "includes/functions_sphinx.php" "includes/search/fulltext_sphinx.php" "language/en/mods/fulltext_sphinx.php")
+
 print_help() {
 	echo "Usage: create_links PATH_TO_PHPBB [PATH_TO_SPHINX_PLUGIN]"
 	exit 1
@@ -32,7 +35,6 @@ fi
 
 absolute_plugin_path=`cd $plugin_path; pwd;`
 
-checkdirs=("includes" "includes/search" "language/en/mods")
 n=${#checkdirs[@]}
 i=0
 while [ "$i" -lt "$n" ]; do
@@ -49,7 +51,6 @@ while [ "$i" -lt "$n" ]; do
 	let "i = $i + 1"
 done
 
-files=("includes/sphinxapi.php" "includes/functions_sphinx.php" "includes/search/fulltext_sphinx.php" "language/en/mods/fulltext_sphinx.php")
 n=${#files[@]}
 i=0
 while [ "$i" -lt "$n" ]; do

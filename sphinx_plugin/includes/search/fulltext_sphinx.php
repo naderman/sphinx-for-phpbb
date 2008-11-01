@@ -19,15 +19,15 @@ if (!defined('IN_PHPBB'))
 * @ignore
 */
 include_once($phpbb_root_path . 'includes/search/search.' . $phpEx);
-require($phpbb_root_path . "includes/sphinxapi.php");
+require($phpbb_root_path . "includes/sphinxapi-0.9.8." . $phpEx);
 define('INDEXER_NAME', 'indexer');
 define('SEARCHD_NAME', 'searchd');
 define('SPHINX_TABLE', table_prefix() . 'sphinx');
 
 /**
 * Returns the global table prefix
-* This function is necessary as this file is sometimes included in a function
-* and table_prefix is in global space.
+* This function is necessary as this file is sometimes included from within a
+* function and table_prefix is in global space.
 */
 function table_prefix() {
 	global $table_prefix;
@@ -104,9 +104,13 @@ class fulltext_sphinx extends search_backend
 
 		$paths = array('fulltext_sphinx_bin_path', 'fulltext_sphinx_config_path', 'fulltext_sphinx_data_path');
 
-		// add trailing slash if it's not present
+		// check for completeness and add trailing slash if it's not present
 		foreach ($paths as $path)
 		{
+			if (empty($config[$path]))
+			{
+				return $user->lang['FULLTEXT_SPHINX_UNCONFIGURED'];
+			}
 			if ($config[$path] && substr($config[$path], -1) != '/')
 			{
 				set_config($path, $config[$path] . '/');
@@ -1104,26 +1108,37 @@ class fulltext_sphinx extends search_backend
 			}
 		}
 
-		/**
-		* @todo check whether stopwords are really activated/make it an option
-		*/
+		// check whether stopwords file is available and enabled
+		if (file_exists($config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt'))
+		{
+			$stopwords_available = true;
+			$stopwords_active = $config['fulltext_sphinx_stopwords'];
+		}
+		else
+		{
+			$stopwords_available = false;
+			$stopwords_active = false;
+			set_config('fulltext_sphinx_stopwords', '0');
+		}
 
 		$tpl = '
+		<span class="error">' . $user->lang['FULLTEXT_SPHINX_CONFIGURE_BEFORE']. '</span>
 		<dl>
 			<dt><label for="fulltext_sphinx_config_path">' . $user->lang['FULLTEXT_SPHINX_CONFIG_PATH'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_CONFIG_PATH_EXPLAIN'] . '</span></dt>
 			<dd><input id="fulltext_sphinx_config_path" type="text" size="40" maxlength="255" name="config[fulltext_sphinx_config_path]" value="' . $config['fulltext_sphinx_config_path'] . '" /></dd>
 		</dl>
 		<dl>
-			<dt><label for="fulltext_sphinx_data_path">' . $user->lang['FULLTEXT_SPHINX_STOPWORDS_FILE'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_STOPWORDS_FILE_EXPLAIN'] . '</span></dt>
-			<dd><strong>' . ((file_exists($config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt')) ? $user->lang['YES'] : $user->lang['NO']) . '</strong></dd>
+			<dt><label for="fulltext_sphinx_bin_path">' . $user->lang['FULLTEXT_SPHINX_BIN_PATH'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_BIN_PATH_EXPLAIN'] . '</span></dt>
+			<dd><input id="fulltext_sphinx_bin_path" type="text" size="40" maxlength="255" name="config[fulltext_sphinx_bin_path]" value="' . $bin_path . '" /></dd>
 		</dl>
 		<dl>
 			<dt><label for="fulltext_sphinx_data_path">' . $user->lang['FULLTEXT_SPHINX_DATA_PATH'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_DATA_PATH_EXPLAIN'] . '</span></dt>
 			<dd><input id="fulltext_sphinx_data_path" type="text" size="40" maxlength="255" name="config[fulltext_sphinx_data_path]" value="' . $config['fulltext_sphinx_data_path'] . '" /></dd>
 		</dl>
+		<span class="error">' . $user->lang['FULLTEXT_SPHINX_CONFIGURE_AFTER']. '</span>
 		<dl>
-			<dt><label for="fulltext_sphinx_bin_path">' . $user->lang['FULLTEXT_SPHINX_BIN_PATH'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_BIN_PATH_EXPLAIN'] . '</span></dt>
-			<dd><input id="fulltext_sphinx_bin_path" type="text" size="40" maxlength="255" name="config[fulltext_sphinx_bin_path]" value="' . $bin_path . '" /></dd>
+			<dt><label for="fulltext_sphinx_stopwords">' . $user->lang['FULLTEXT_SPHINX_STOPWORDS_FILE'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_STOPWORDS_FILE_EXPLAIN'] . '</span></dt>
+			<dd><label><input type="radio" id="fulltext_sphinx_stopwords" name="config[fulltext_sphinx_stopwords]" value="1"' . (($stopwords_active) ? ' checked="checked"' : '') . ((!$stopwords_available) ? ' disabled="disabled"' : '') . ' class="radio" /> ' . $user->lang['YES'] . '</label><label><input type="radio" name="config[fulltext_sphinx_stopwords]" value="0"' . ((!$stopwords_active) ? ' checked="checked"' : '') . ' class="radio" /> ' . $user->lang['NO'] . '</label></dd>
 		</dl>
 		<dl>
 			<dt><label for="fulltext_sphinx_port">' . $user->lang['FULLTEXT_SPHINX_PORT'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_PORT_EXPLAIN'] . '</span></dt>
@@ -1155,6 +1170,7 @@ function sphinx_unlink_by_pattern($path, $pattern)
 			unlink($path . $file);
 		}
 	}
+	closedir($dir);
 }
 
 /**
@@ -1179,6 +1195,10 @@ function sphinx_read_last_lines($file, $amount)
 		if ($c == "\n")
 		{
 			$i++;
+		}
+		if (feof($fp))
+		{
+			break;
 		}
 	}
 
