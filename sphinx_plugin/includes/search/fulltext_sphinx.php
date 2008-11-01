@@ -199,8 +199,6 @@ class fulltext_sphinx extends search_backend
 		$config_data = array(
 			"source source_phpbb_{$this->id}_main" => array(
 				array('type',						'mysql'),
-				array('strip_html',					'0'),
-				array('index_html_attrs',			''),
 				array('sql_host',					$dbhost),
 				array('sql_user',					$dbuser),
 				array('sql_pass',					$dbpasswd),
@@ -214,7 +212,7 @@ class fulltext_sphinx extends search_backend
 						p.forum_id,
 						p.topic_id,
 						p.poster_id,
-						IF (p.post_id = t.topic_first_post_id, 1, 2) as topic_first_post,
+						IF (p.post_id = t.topic_first_post_id, 1, 0) as topic_first_post,
 						p.post_time,
 						p.post_subject,
 						p.post_subject as title,
@@ -226,12 +224,12 @@ class fulltext_sphinx extends search_backend
 				array('sql_query_post',				''),
 				array('sql_query_post_index',		'REPLACE INTO ' . SPHINX_TABLE . ' ( counter_id, max_doc_id ) VALUES ( 1, $maxid )'),
 				array('sql_query_info',				'SELECT * FROM ' . POSTS_TABLE . ' WHERE post_id = $id'),
-				array('sql_group_column',			'forum_id'),
-				array('sql_group_column',			'topic_id'),
-				array('sql_group_column',			'poster_id'),
-				array('sql_group_column',			'topic_first_post'),
-				array('sql_date_column'	,			'post_time'),
-				array('sql_str2ordinal_column',	'post_subject'),
+				array('sql_attr_uint',				'forum_id'),
+				array('sql_attr_uint',				'topic_id'),
+				array('sql_attr_uint',				'poster_id'),
+				array('sql_attr_bool',				'topic_first_post'),
+				array('sql_attr_timestamp'	,		'post_time'),
+				array('sql_attr_str2ordinal',		'post_subject'),
 			),
 			"source source_phpbb_{$this->id}_delta : source_phpbb_{$this->id}_main" => array(
 				array('sql_query_pre',				''),
@@ -242,7 +240,7 @@ class fulltext_sphinx extends search_backend
 						p.forum_id,
 						p.topic_id,
 						p.poster_id,
-						IF (p.post_id = t.topic_first_post_id, 1, 2) as topic_first_post,
+						IF (p.post_id = t.topic_first_post_id, 1, 0) as topic_first_post,
 						p.post_time,
 						p.post_subject,
 						p.post_subject as title,
@@ -283,7 +281,7 @@ class fulltext_sphinx extends search_backend
 			),
 		);
 
-		$non_unique = array('sql_group_column' => true, 'sql_date_column' => true, 'sql_str2ordinal_column' => true);
+		$non_unique = array('sql_group_column' => true, 'sql_date_column' => true, 'sql_str2ordinal_column' => true, 'sql_attr_uint' => true, 'sql_attr_timestamp' => true, 'sql_attr_str2ordinal' => true);
 
 		foreach ($config_data as $section_name => $section_data)
 		{
@@ -326,6 +324,8 @@ class fulltext_sphinx extends search_backend
 
 		set_config('fulltext_sphinx_configured', '1');
 
+		$this->tidy();
+
 		return false;
 	}
 
@@ -343,19 +343,12 @@ class fulltext_sphinx extends search_backend
 
 		if ($terms == 'all')
 		{
-			$match		= array('#\sand\s#i', '#\sor\s#i', '#\snot\s#i', '#\+#', '#-#', '#\|#');
-			$replace	= array(' & ', ' | ', '  - ', ' +', ' -', ' |');
+			$match		= array('#\sand\s#i', '#\sor\s#i', '#\snot\s#i', '#\+#', '#-#', '#\|#', '#@#');
+			$replace	= array(' & ', ' | ', '  - ', ' +', ' -', ' |', '');
 
 			$replacements = 0;
 			$keywords = preg_replace($match, $replace, $keywords);
-			if (strpos($keywords, '&') !== false || strpos($keywords, '+') !== false || strpos($keywords, '-') !== false || strpos($keywords, '|') !== false)
-			{
-				$this->sphinx->SetMatchMode(SPH_MATCH_BOOLEAN);
-			}
-			else
-			{
-				$this->sphinx->SetMatchMode(SPH_MATCH_ALL);
-			}
+			$this->sphinx->SetMatchMode(SPH_MATCH_EXTENDED);
 		}
 		else
 		{
@@ -433,27 +426,6 @@ class fulltext_sphinx extends search_backend
 			return false;
 		}
 
-		// generate a search_key from all the options to identify the results
-		$search_key = md5(implode('#', array(
-			$this->search_query,
-			$type,
-			$fields,
-			$terms,
-			$sort_days,
-			$sort_key,
-			$topic_id,
-			implode(',', $ex_fid_ary),
-			implode(',', $m_approve_fid_ary),
-			implode(',', $author_ary)
-		)));
-
-		// try reading the results from cache
-		$result_count = 0;
-		if (false && $this->obtain_ids($search_key, $result_count, $id_ary, $start, $per_page, $sort_dir) == SEARCH_RESULT_IN_CACHE)
-		{
-			return $result_count;
-		}
-
 		$id_ary = array();
 
 		$join_topic = ($type == 'posts') ? false : true;
@@ -462,8 +434,23 @@ class fulltext_sphinx extends search_backend
 		$sql_sort = $sort_by_sql[$sort_key] . (($sort_dir == 'a') ? ' ASC' : ' DESC');
 		$sql_sort_table = $sql_sort_join = '';
 
-		$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_time');
-		//$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_subject_int');
+		switch ($sort_key)
+		{
+			case 'a':
+				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'poster_id');
+			break;
+			case 'f':
+				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'forum_id');
+			break;
+			case 'i':
+			case 's':
+				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_subject');
+			break;
+			case 't':
+			default:
+				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_time');
+			break;
+		}
 
 		if (sizeof($ex_fid_ary))
 		{
@@ -493,26 +480,38 @@ class fulltext_sphinx extends search_backend
 			$this->sphinx->SetFilter('topic_id', array($topic_id));
 		}
 		
+		$search_query_prefix = '';
+
 		switch($fields)
 		{
 			case 'titleonly':
-				$this->sphinx->SetWeights(array(1,0)); // only weight for the title
+				// only search the title
+				if ($terms == 'all')
+				{
+					$search_query_prefix = '@title ';
+				}
+				$this->sphinx->SetFieldWeights(array("title" => 5, "data" => 1)); // weight for the title
 				$this->sphinx->SetFilter('topic_first_post', array(1)); // 1 is first_post, 2 is not first post
 				break;
 			case 'msgonly':
-				$this->sphinx->SetWeights(array(0,1)); // only weight for the body
+				// only search the body
+				if ($terms == 'all')
+				{
+					$search_query_prefix = '@data ';
+				}
+				$this->sphinx->SetFieldWeights(array("title" => 1, "data" => 5)); // weight for the body
 				break;
 			case 'firstpost':
-				$this->sphinx->SetWeights(array(5,1)); // more relative weight for the title, also search the body
+				$this->sphinx->SetFieldWeights(array("title" => 5, "data" => 1)); // more relative weight for the title, also search the body
 				$this->sphinx->SetFilter('topic_first_post', array(1)); // 1 is first_post, 2 is not first post
 				break;
 			default:
-				$this->sphinx->SetWeights(array(5,1)); // more relative weight for the title, also search the body
+				$this->sphinx->SetFieldWeights(array("title" => 5, "data" => 1)); // more relative weight for the title, also search the body
 				break;
 		}
 
-		$this->sphinx->SetLimits($start, (int) $config['search_block_size']);
-		$result = $this->sphinx->Query(str_replace('&quot;', '"', $this->search_query));
+		$this->sphinx->SetLimits($start, (int) $per_page);
+		$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query));
 		$id_ary = array();
 		if (isset($result['matches']))
 		{
@@ -535,8 +534,6 @@ class fulltext_sphinx extends search_backend
 		
 		$result_count = $result['total_found'];
 
-		// store the ids, from start on then delete anything that isn't on the current page because we only need ids for one page
-		$this->save_ids($search_key, $this->search_query, $author_ary, $result_count, $id_ary, $start, $sort_dir);
 		$id_ary = array_slice($id_ary, 0, (int) $per_page);
 
 		return $result_count;
@@ -1106,6 +1103,12 @@ class fulltext_sphinx extends search_backend
 					}
 				}
 			}
+		}
+
+		// rewrite config if fulltext sphinx is enabled
+		if (isset($config['fulltext_sphinx_configured']) && $config['fulltext_sphinx_configured'])
+		{
+			$this->config_updated();
 		}
 
 		// check whether stopwords file is available and enabled
