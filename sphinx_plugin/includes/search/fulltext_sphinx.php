@@ -395,12 +395,6 @@ class fulltext_sphinx
 			return false;
 		}
 
-		// if author search use all documents and then filter
-		if (!strlen($this->search_query))
-		{
-			$this->sphinx->SetMatchMode(SPH_MATCH_FULLSCAN);
-		}
-
 		$id_ary = array();
 
 		$join_topic = ($type == 'posts') ? false : true;
@@ -541,6 +535,7 @@ class fulltext_sphinx
 	{
 		$this->search_query = '';
 
+		$this->sphinx->SetMatchMode(SPH_MATCH_FULLSCAN);
 		$fields = ($firstpost_only) ? 'firstpost' : 'all';
 		$terms = 'all';
 		return $this->keyword_search($type, $fields, $terms, $sort_by_sql, $sort_key, $sort_dir, $sort_days, $ex_fid_ary, $m_approve_fid_ary, $topic_id, $author_ary, $id_ary, $start, $per_page);
