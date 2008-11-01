@@ -2,7 +2,7 @@
 /** 
 *
 * @package search
-* @version $Id: fulltext_sphinx.php,v 1.1.1.1 2007/03/18 21:07:10 naderman Exp $
+* @version $Id$
 * @copyright (c) 2005 phpBB Group 
 * @license http://opensource.org/licenses/gpl-license.php GNU Public License 
 *
