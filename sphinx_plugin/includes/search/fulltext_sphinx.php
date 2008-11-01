@@ -18,7 +18,6 @@ if (!defined('IN_PHPBB'))
 /**
 * @ignore
 */
-include_once($phpbb_root_path . 'includes/search/search.' . $phpEx);
 require($phpbb_root_path . "includes/sphinxapi-0.9.8." . $phpEx);
 define('INDEXER_NAME', 'indexer');
 define('SEARCHD_NAME', 'searchd');
@@ -39,7 +38,7 @@ function table_prefix() {
 * Fulltext search based on the sphinx search deamon
 * @package search
 */
-class fulltext_sphinx extends search_backend
+class fulltext_sphinx
 {
 	var $stats = array();
 	var $word_length = array();
@@ -381,18 +380,11 @@ class fulltext_sphinx extends search_backend
 	{
 		global $config;
 
-		$this->get_ignore_words();
-
 		// Split words
 		$text = preg_replace('#([^\p{L}\p{N}\'*])#u', '$1$1', str_replace('\'\'', '\' \'', trim($text)));
 		$matches = array();
 		preg_match_all('#(?:[^\p{L}\p{N}*]|^)([+\-|]?(?:[\p{L}\p{N}*]+\'?)*[\p{L}\p{N}*])(?:[^\p{L}\p{N}*]|$)#u', $text, $matches);
 		$text = $matches[1];
-
-		if (sizeof($this->ignore_words))
-		{
-			$text = array_diff($text, $this->ignore_words);
-		}
 
 		// remove too short or too long words
 		$text = array_values($text);
@@ -569,28 +561,6 @@ class fulltext_sphinx extends search_backend
 			return 0;
 		}
 
-		// generate a search_key from all the options to identify the results
-		$search_key = md5(implode('#', array(
-			'',
-			$type,
-			($firstpost_only) ? 'firstpost' : '',
-			'',
-			'',
-			$sort_days,
-			$sort_key,
-			$topic_id,
-			implode(',', $ex_fid_ary),
-			implode(',', $m_approve_fid_ary),
-			implode(',', $author_ary)
-		)));
-
-		// try reading the results from cache
-		$total_results = 0;
-		if ($this->obtain_ids($search_key, $total_results, $id_ary, $start, $per_page, $sort_dir) == SEARCH_RESULT_IN_CACHE)
-		{
-			return $total_results;
-		}
-
 		$id_ary = array();
 
 		// Create some display specific sql strings
@@ -750,7 +720,6 @@ class fulltext_sphinx extends search_backend
 
 		if (sizeof($id_ary))
 		{
-			$this->save_ids($search_key, '', $author_ary, $total_results, $id_ary, $start, $sort_dir);
 			$id_ary = array_slice($id_ary, 0, $per_page);
 
 			return $total_results;
@@ -772,48 +741,7 @@ class fulltext_sphinx extends search_backend
 	 */
 	function index($mode, $post_id, &$message, &$subject, $poster_id, $forum_id)
 	{
-		global $db, $config;
-
-		// Split old and new post/subject to obtain array of words
-		$split_text = $this->split_message($message);
-		$split_title = ($subject) ? $this->split_message($subject) : array();
-
-		$words = array();
-		if ($mode == 'edit')
-		{
-			$old_text = array();
-			$old_title = array();
-
-			$sql = 'SELECT post_text, post_subject
-				FROM ' . POSTS_TABLE . "
-				WHERE post_id = $post_id";
-			$result = $db->sql_query($sql);
-
-			if ($row = $db->sql_fetchrow($result))
-			{
-				$old_text = $this->split_message($row['post_text']);
-				$old_title = $this->split_message($row['post_subject']);
-			}
-			$db->sql_freeresult($result);
-
-			$words = array_unique(array_merge(
-				array_diff($split_text, $old_text), 
-				array_diff($split_title, $old_title),
-				array_diff($old_text, $split_text),
-				array_diff($old_title, $split_title)
-			));
-			unset($old_title);
-			unset($old_text);
-		}
-		else
-		{
-			$words = array_unique(array_merge($split_text, $split_title));
-		}
-		unset($split_text);
-		unset($split_title);
-
-		// destroy cached search results containing any of the words removed or added
-		$this->destroy_cache($words, array($poster_id));
+		global $config;
 
 		if ($this->index_created())
 		{
@@ -824,8 +752,6 @@ class fulltext_sphinx extends search_backend
 			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
 			chdir($cwd);
 		}
-
-		unset($words);
 	}
 
 	/**
@@ -833,7 +759,7 @@ class fulltext_sphinx extends search_backend
 	*/
 	function index_remove($post_ids, $author_ids, $forum_ids)
 	{
-		$this->destroy_cache(array(), $author_ids);
+		// just ignore it
 	}
 
 	/**
@@ -841,10 +767,7 @@ class fulltext_sphinx extends search_backend
 	*/
 	function tidy($create = false)
 	{
-		global $db, $config, $phpbb_root_path;
-
-		// destroy too old cached search results
-		$this->destroy_cache(array());
+		global $config;
 
 		if ($this->index_created() || $create)
 		{
@@ -948,7 +871,7 @@ class fulltext_sphinx extends search_backend
 	{
 		global $config;
 
-		exec('killall -9 searchd >> /dev/null 2>&1 &');
+		exec('killall -9 ' . SEARCHD_NAME . ' >> /dev/null 2>&1 &');
 		
 		if (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
 		{
