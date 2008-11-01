@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+print_help() {
+	echo "Usage: make_mod MOD_VERSION"
+	exit 1
+}
+
+mod_version="$1"
+mod_name="sphinx4phpbb-$mod_version"
+
+if [ "$1" = "--help" -o "$1" = "-h" -o "$1" == "" ]; then
+	print_help
+fi
+
+if [ -e "$mod_name" ]; then
+	echo "sphinx4phpbb exists, delete before running this script"
+	print_help
+fi
+
+if [ -e "$mod_name.tar.bz2" ]; then
+	echo "sphinx4phpbb.tar.bz2 exists, delete before running this script"
+	print_help
+fi
+
+mkdir -p $mod_name/root
+
+cp sphinx_mod/* $mod_name/
+cp -r sphinx_plugin/includes $mod_name/root/
+cp -r sphinx_plugin/language $mod_name/root/
+cp -r sphinx_plugin/config $mod_name/
+
+find $mod_name/ -name "*~" -exec rm {} \;
+
+tar -cjvf $mod_name.tar.bz2 $mod_name
+rm -rf $mod_name
