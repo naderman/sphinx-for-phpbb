@@ -52,6 +52,7 @@ class fulltext_sphinx
 		global $config;
 
 		$this->id = $config['avatar_salt'];
+		$this->indexes = 'index_phpbb_' . $this->id . '_main;index_phpbb_' . $this->id . '_delta';
 
 		$this->sphinx = new SphinxClient ();
 
@@ -215,7 +216,8 @@ class fulltext_sphinx
 						p.post_time,
 						p.post_subject,
 						p.post_subject as title,
-						p.post_text as data
+						p.post_text as data,
+						0 as deleted
 					FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
 					WHERE
 						p.topic_id = t.topic_id
@@ -227,6 +229,7 @@ class fulltext_sphinx
 				array('sql_attr_uint',				'topic_id'),
 				array('sql_attr_uint',				'poster_id'),
 				array('sql_attr_bool',				'topic_first_post'),
+				array('sql_attr_bool',				'deleted'),
 				array('sql_attr_timestamp'	,		'post_time'),
 				array('sql_attr_str2ordinal',		'post_subject'),
 			),
@@ -243,7 +246,8 @@ class fulltext_sphinx
 						p.post_time,
 						p.post_subject,
 						p.post_subject as title,
-						p.post_text as data
+						p.post_text as data,
+						0 as deleted
 					FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
 					WHERE
 						p.topic_id = t.topic_id
@@ -254,7 +258,7 @@ class fulltext_sphinx
 				array('source',						"source_phpbb_{$this->id}_main"),
 				array('docinfo',					'extern'),
 				array('morphology',					'none'),
-				array('stopwords',					(file_exists($config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt')) ? $config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt' : ''),
+				array('stopwords',					(file_exists($config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt') && $config['fulltext_sphinx_stopwords']) ? $config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt' : ''),
 				array('min_word_len',				'2'),
 				array('charset_type',				'utf-8'),
 				array('charset_table',				'U+FF10..U+FF19->0..9, 0..9, U+FF41..U+FF5A->a..z, U+FF21..U+FF3A->a..z, A..Z->a..z, a..z, U+0149, U+017F, U+0138, U+00DF, U+00FF, U+00C0..U+00D6->U+00E0..U+00F6, U+00E0..U+00F6, U+00D8..U+00DE->U+00F8..U+00FE, U+00F8..U+00FE, U+0100->U+0101, U+0101, U+0102->U+0103, U+0103, U+0104->U+0105, U+0105, U+0106->U+0107, U+0107, U+0108->U+0109, U+0109, U+010A->U+010B, U+010B, U+010C->U+010D, U+010D, U+010E->U+010F, U+010F, U+0110->U+0111, U+0111, U+0112->U+0113, U+0113, U+0114->U+0115, U+0115, U+0116->U+0117, U+0117, U+0118->U+0119, U+0119, U+011A->U+011B, U+011B, U+011C->U+011D, U+011D, U+011E->U+011F, U+011F, U+0130->U+0131, U+0131, U+0132->U+0133, U+0133, U+0134->U+0135, U+0135, U+0136->U+0137, U+0137, U+0139->U+013A, U+013A, U+013B->U+013C, U+013C, U+013D->U+013E, U+013E, U+013F->U+0140, U+0140, U+0141->U+0142, U+0142, U+0143->U+0144, U+0144, U+0145->U+0146, U+0146, U+0147->U+0148, U+0148, U+014A->U+014B, U+014B, U+014C->U+014D, U+014D, U+014E->U+014F, U+014F, U+0150->U+0151, U+0151, U+0152->U+0153, U+0153, U+0154->U+0155, U+0155, U+0156->U+0157, U+0157, U+0158->U+0159, U+0159, U+015A->U+015B, U+015B, U+015C->U+015D, U+015D, U+015E->U+015F, U+015F, U+0160->U+0161, U+0161, U+0162->U+0163, U+0163, U+0164->U+0165, U+0165, U+0166->U+0167, U+0167, U+0168->U+0169, U+0169, U+016A->U+016B, U+016B, U+016C->U+016D, U+016D, U+016E->U+016F, U+016F, U+0170->U+0171, U+0171, U+0172->U+0173, U+0173, U+0174->U+0175, U+0175, U+0176->U+0177, U+0177, U+0178->U+00FF, U+00FF, U+0179->U+017A, U+017A, U+017B->U+017C, U+017C, U+017D->U+017E, U+017E, U+4E00..U+9FFF'),
@@ -374,33 +378,6 @@ class fulltext_sphinx
 	}
 
 	/**
-	* Turns text into an array of words
-	*/
-	function split_message($text)
-	{
-		global $config;
-
-		// Split words
-		$text = preg_replace('#([^\p{L}\p{N}\'*])#u', '$1$1', str_replace('\'\'', '\' \'', trim($text)));
-		$matches = array();
-		preg_match_all('#(?:[^\p{L}\p{N}*]|^)([+\-|]?(?:[\p{L}\p{N}*]+\'?)*[\p{L}\p{N}*])(?:[^\p{L}\p{N}*]|$)#u', $text, $matches);
-		$text = $matches[1];
-
-		// remove too short or too long words
-		$text = array_values($text);
-		for ($i = 0, $n = sizeof($text); $i < $n; $i++)
-		{
-			$text[$i] = trim($text[$i]);
-			if (utf8_strlen($text[$i]) < $config['fulltext_sphinx_min_word_len'] || utf8_strlen($text[$i]) > $config['fulltext_sphinx_max_word_len'])
-			{
-				unset($text[$i]);
-			}
-		}
-
-		return array_values($text);
-	}
-
-	/**
 	* Performs a search on keywords depending on display specific params.
 	*
 	* @param array $id_ary passed by reference, to be filled with ids for the page specified by $start and $per_page, should be ordered
@@ -444,29 +421,7 @@ class fulltext_sphinx
 			break;
 		}
 
-		if (sizeof($ex_fid_ary))
-		{
-			// All forums that a user is allowed to access
-			$fid_ary = array_unique(array_intersect(array_keys($auth->acl_getf('f_read', true)), array_keys($auth->acl_getf('f_search', true))));
-			// All forums that the user wants to and can search in
-			$search_forums = array_diff($fid_ary, $ex_fid_ary);
-			
-			if (sizeof($search_forums))
-			{
-				$this->sphinx->SetFilter('forum_id', $search_forums);
-			}
-		}
-
-		if (sizeof($author_ary))
-		{
-			$this->sphinx->SetFilter('poster_id', $author_ary);
-		}
-
-		if ($type == 'topics')
-		{
-			$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR);
-		}
-
+		// most narrow filters first
 		if ($topic_id)
 		{
 			$this->sphinx->SetFilter('topic_id', array($topic_id));
@@ -502,8 +457,33 @@ class fulltext_sphinx
 				break;
 		}
 
+		if (sizeof($author_ary))
+		{
+			$this->sphinx->SetFilter('poster_id', $author_ary);
+		}
+
+		if (sizeof($ex_fid_ary))
+		{
+			// All forums that a user is allowed to access
+			$fid_ary = array_unique(array_intersect(array_keys($auth->acl_getf('f_read', true)), array_keys($auth->acl_getf('f_search', true))));
+			// All forums that the user wants to and can search in
+			$search_forums = array_diff($fid_ary, $ex_fid_ary);
+			
+			if (sizeof($search_forums))
+			{
+				$this->sphinx->SetFilter('forum_id', $search_forums);
+			}
+		}
+
+		$this->sphinx->SetFilter('deleted', array(0));
+
+		if ($type == 'topics')
+		{
+			$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR);
+		}
+
 		$this->sphinx->SetLimits($start, (int) $per_page);
-		$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query));
+		$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
 		$id_ary = array();
 		if (isset($result['matches']))
 		{
@@ -743,6 +723,11 @@ class fulltext_sphinx
 	{
 		global $config;
 
+		if ($mode == 'edit')
+		{
+			$this->sphinx->UpdateAttributes($this->indexes, array('forum_id', 'title', 'data', 'poster_id'), array($post_id => array($forum_id, $subject, $message, $poster_id)));
+		}
+
 		if ($this->index_created())
 		{
 			$rotate = ($this->searchd_running()) ? ' --rotate' : '';
@@ -755,11 +740,17 @@ class fulltext_sphinx
 	}
 
 	/**
-	* Destroy cached results, that might be outdated after deleting a post
+	* Delete a post from the index after it was deleted
 	*/
 	function index_remove($post_ids, $author_ids, $forum_ids)
 	{
-		// just ignore it
+		$values = array();
+		foreach ($post_ids as $post_id)
+		{
+			$values[$post_id] = array(1);
+		}
+
+		$this->sphinx->UpdateAttributes($this->indexes, array("deleted"), $values);
 	}
 
 	/**
@@ -853,15 +844,18 @@ class fulltext_sphinx
 		$sql = 'SHOW TABLES LIKE \'' . SPHINX_TABLE . '\'';
 		$result = $db->sql_query($sql);
 
+		$created = false;
+
 		if ($db->sql_fetchrow($result))
 		{
 			if ((file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.spd') && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.spd')) || ($allow_new_files && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.new.spd') && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.new.spd')))
 			{
-				return true;
+				$created = true;
 			}
 		}
+		$db->sql_freeresult($result);
 
-		return false;
+		return $created;
 	}
 
 	/**
@@ -960,7 +954,20 @@ class fulltext_sphinx
 		$this->stats['last_searches'] = '';
 		if (file_exists($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log'))
 		{
-			$this->stats['last_searches'] = utf8_htmlspecialchars(sphinx_read_last_lines($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log', 3));
+			$last_searches = explode("\n", utf8_htmlspecialchars(sphinx_read_last_lines($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log', 3)));
+
+			foreach($last_searches as $i => $search)
+			{
+				if (strpos($search, '[' . $this->indexes . ']') !== false)
+				{
+					$last_searches[$i] = str_replace('[' . $this->indexes . ']', '', $search);
+				}
+				else
+				{
+					$last_searches[$i] = '';
+				}
+			}
+			$this->stats['last_searches'] = implode("\n", $last_searches);
 		}
 	}
 
@@ -978,6 +985,7 @@ class fulltext_sphinx
 			'fulltext_sphinx_data_path' => 'string',
 			'fulltext_sphinx_bin_path' => 'string',
 			'fulltext_sphinx_port' => 'int',
+			'fulltext_sphinx_stopwords'	=> 'bool',
 		);
 
 		foreach ($config_vars as $config_var => $type)
