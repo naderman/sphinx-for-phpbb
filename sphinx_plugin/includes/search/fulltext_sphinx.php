@@ -728,7 +728,7 @@ class fulltext_sphinx
 			if ($pid)
 			{
 				$output = array();
-				exec('pidof searchd', $output);
+				exec('pidof ' . SEARCHD_NAME, $output);
 				if ($output && $output[0] == $pid)
 				{
 					return true;
@@ -849,7 +849,7 @@ class fulltext_sphinx
 			else
 			{
 				$output = array();
-				if (!@exec('whereis indexer', $output))
+				if (!@exec('whereis ' . INDEXER_NAME, $output))
 				{
 					return array(
 						'tpl' => $user->lang['FULLTEXT_SPHINX_REQUIRES_EXEC'],
