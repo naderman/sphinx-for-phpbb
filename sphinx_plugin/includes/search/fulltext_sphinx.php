@@ -143,7 +143,7 @@ class fulltext_sphinx
 			}
 		}
 
-		$writable_paths = array($config['fulltext_sphinx_config_path'], $config['fulltext_sphinx_data_path'], $config['fulltext_sphinx_data_path'] . 'log');
+		$writable_paths = array($config['fulltext_sphinx_config_path'], $config['fulltext_sphinx_data_path'], $config['fulltext_sphinx_data_path'] . 'log/');
 
 		foreach ($writable_paths as $i => $path)
 		{
