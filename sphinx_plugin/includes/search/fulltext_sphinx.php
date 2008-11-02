@@ -23,7 +23,7 @@ define('INDEXER_NAME', 'indexer');
 define('SEARCHD_NAME', 'searchd');
 define('SPHINX_TABLE', table_prefix() . 'sphinx');
 
-define('MAX_MATCHES', 1000000);
+define('MAX_MATCHES', 100000);
 
 /**
 * Returns the global table prefix
