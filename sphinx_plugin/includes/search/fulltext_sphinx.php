@@ -327,6 +327,7 @@ class fulltext_sphinx
 
 		set_config('fulltext_sphinx_configured', '1');
 
+		$this->shutdown_searchd();
 		$this->tidy();
 
 		return false;
