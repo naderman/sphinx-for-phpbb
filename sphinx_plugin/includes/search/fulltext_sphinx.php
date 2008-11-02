@@ -23,6 +23,8 @@ define('INDEXER_NAME', 'indexer');
 define('SEARCHD_NAME', 'searchd');
 define('SPHINX_TABLE', table_prefix() . 'sphinx');
 
+define('MAX_MATCHES', 1000000);
+
 /**
 * Returns the global table prefix
 * This function is necessary as this file is sometimes included from within a
@@ -280,7 +282,7 @@ class fulltext_sphinx
 				array('read_timeout',				'5'),
 				array('max_children',				'30'),
 				array('pid_file',					$config['fulltext_sphinx_data_path'] . "searchd.pid"),
-				array('max_matches',				'10000000'),
+				array('max_matches',				(string) MAX_MATCHES),
 			),
 		);
 
@@ -483,7 +485,7 @@ class fulltext_sphinx
 			$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR);
 		}
 
-		$this->sphinx->SetLimits($start, (int) $per_page);
+		$this->sphinx->SetLimits($start, (int) $per_page, MAX_MATCHES);
 		$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
 		$id_ary = array();
 		if (isset($result['matches']))
