@@ -313,6 +313,7 @@ class SphinxClient
 				return false;
 			}
 		}
+		$v = $version_data[1];
 		$v = (int)$v;
 		if ( $v<1 )
 		{
