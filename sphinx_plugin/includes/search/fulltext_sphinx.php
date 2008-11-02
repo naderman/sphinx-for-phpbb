@@ -280,7 +280,7 @@ class fulltext_sphinx
 				array('read_timeout',				'5'),
 				array('max_children',				'30'),
 				array('pid_file',					$config['fulltext_sphinx_data_path'] . "searchd.pid"),
-				array('max_matches',				'1000'),
+				array('max_matches',				'10000000'),
 			),
 		);
 
