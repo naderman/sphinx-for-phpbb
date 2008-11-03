@@ -562,7 +562,7 @@ class fulltext_sphinx
 
 		if ($mode == 'edit')
 		{
-			$this->sphinx->UpdateAttributes($this->indexes, array('forum_id', 'poster_id'), array($post_id => array($forum_id, $poster_id)));
+			$this->sphinx->UpdateAttributes($this->indexes, array('forum_id', 'poster_id'), array((int)$post_id => array((int)$forum_id, (int)$poster_id)));
 		}
 
 		if ($this->index_created())
