@@ -406,29 +406,46 @@ class fulltext_sphinx
 		$join_topic = ($type == 'posts') ? false : true;
 
 		// sorting
-		switch ($sort_key)
+
+		if ($type == 'topics')
 		{
-			case 'a':
-				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'poster_id');
-			break;
-			case 'f':
-				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'forum_id');
-			break;
-			case 'i':
-			case 's':
-				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_subject');
-			break;
-			case 't':
-			default:
-				if ($type == 'topics')
-				{
-					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'topic_last_post_time');
-				}
-				else
-				{
+			switch ($sort_key)
+			{
+				case 'a':
+					$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR, 'poster_id ' . (($sort_dir == 'a') ? 'ASC' : 'DESC'));
+				break;
+				case 'f':
+					$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR, 'forum_id ' . (($sort_dir == 'a') ? 'ASC' : 'DESC'));
+				break;
+				case 'i':
+				case 's':
+					$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR, 'post_subject ' . (($sort_dir == 'a') ? 'ASC' : 'DESC'));
+				break;
+				case 't':
+				default:
+					$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR, 'topic_last_post_time ' . (($sort_dir == 'a') ? 'ASC' : 'DESC'));
+				break;
+			}
+		}
+		else
+		{
+			switch ($sort_key)
+			{
+				case 'a':
+					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'poster_id');
+				break;
+				case 'f':
+					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'forum_id');
+				break;
+				case 'i':
+				case 's':
+					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_subject');
+				break;
+				case 't':
+				default:
 					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_time');
-				}
-			break;
+				break;
+			}
 		}
 
 		// most narrow filters first
@@ -486,11 +503,6 @@ class fulltext_sphinx
 		}
 
 		$this->sphinx->SetFilter('deleted', array(0));
-
-		if ($type == 'topics')
-		{
-			$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR);
-		}
 
 		$this->sphinx->SetLimits($start, (int) $per_page, MAX_MATCHES);
 		$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
