@@ -23,7 +23,7 @@ define('INDEXER_NAME', 'indexer');
 define('SEARCHD_NAME', 'searchd');
 define('SPHINX_TABLE', table_prefix() . 'sphinx');
 
-define('MAX_MATCHES', 100000);
+define('MAX_MATCHES', 20000);
 
 /**
 * Returns the global table prefix
@@ -219,6 +219,7 @@ class fulltext_sphinx
 						p.post_subject,
 						p.post_subject as title,
 						p.post_text as data,
+						t.topic_last_post_time,
 						0 as deleted
 					FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
 					WHERE
@@ -233,6 +234,7 @@ class fulltext_sphinx
 				array('sql_attr_bool',				'topic_first_post'),
 				array('sql_attr_bool',				'deleted'),
 				array('sql_attr_timestamp'	,		'post_time'),
+				array('sql_attr_timestamp'	,		'topic_last_post_time'),
 				array('sql_attr_str2ordinal',		'post_subject'),
 			),
 			"source source_phpbb_{$this->id}_delta : source_phpbb_{$this->id}_main" => array(
@@ -249,6 +251,7 @@ class fulltext_sphinx
 						p.post_subject,
 						p.post_subject as title,
 						p.post_text as data,
+						t.topic_last_post_time,
 						0 as deleted
 					FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
 					WHERE
@@ -403,9 +406,6 @@ class fulltext_sphinx
 		$join_topic = ($type == 'posts') ? false : true;
 
 		// sorting
-		$sql_sort = $sort_by_sql[$sort_key] . (($sort_dir == 'a') ? ' ASC' : ' DESC');
-		$sql_sort_table = $sql_sort_join = '';
-
 		switch ($sort_key)
 		{
 			case 'a':
@@ -420,7 +420,14 @@ class fulltext_sphinx
 			break;
 			case 't':
 			default:
-				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_time');
+				if ($type == 'topics')
+				{
+					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'topic_last_post_time');
+				}
+				else
+				{
+					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_time');
+				}
 			break;
 		}
 
@@ -487,6 +494,18 @@ class fulltext_sphinx
 
 		$this->sphinx->SetLimits($start, (int) $per_page, MAX_MATCHES);
 		$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
+
+		if (!$result)
+		{
+			// could be connection to localhost:3312 failed (errno=111, msg=Connection refused) during rotate
+			if (strpos($this->sphinx->_error, "errno=111,") !== false)
+			{
+				// retry
+				usleep(300);
+				$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
+			}
+		}
+
 		$id_ary = array();
 		if (isset($result['matches']))
 		{
@@ -558,11 +577,32 @@ class fulltext_sphinx
 	 */
 	function index($mode, $post_id, &$message, &$subject, $poster_id, $forum_id)
 	{
-		global $config;
+		global $config, $db;
 
 		if ($mode == 'edit')
 		{
 			$this->sphinx->UpdateAttributes($this->indexes, array('forum_id', 'poster_id'), array((int)$post_id => array((int)$forum_id, (int)$poster_id)));
+		}
+		else if ($mode != 'post' && $post_id)
+		{
+			// update topic_last_post_time for full topic
+			$sql = 'SELECT p2.post_id
+				FROM ' . POSTS_TABLE . ' p1 LEFT JOIN ' . POSTS_TABLE . ' p2 ON (p1.topic_id = p2.topic_id)
+				WHERE p2.post_id = ' . $post_id;
+			$result = $db->sql_query($sql);
+
+			$post_updates = array();
+			$post_time = time();
+			while ($row = $db->sql_fetchrow($result))
+			{
+				$post_updates[(int)$row['post_id']] = array((int) $post_time);
+			}
+			$db->sql_freeresult($result);
+
+			if (sizeof($post_updates))
+			{
+				$this->sphinx->UpdateAttributes($this->indexes, array('topic_last_post_time'), $post_updates);
+			}
 		}
 
 		if ($this->index_created())
