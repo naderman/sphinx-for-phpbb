@@ -24,6 +24,8 @@ define('SEARCHD_NAME', 'searchd');
 define('SPHINX_TABLE', table_prefix() . 'sphinx');
 
 define('MAX_MATCHES', 20000);
+define('CONNECT_RETRIES', 3);
+define('CONNECT_WAIT_TIME', 300);
 
 /**
 * Returns the global table prefix
@@ -507,15 +509,12 @@ class fulltext_sphinx
 		$this->sphinx->SetLimits($start, (int) $per_page, MAX_MATCHES);
 		$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
 
-		if (!$result)
+		// could be connection to localhost:3312 failed (errno=111, msg=Connection refused) during rotate, retry if so
+		$retries = CONNECT_RETRIES;
+		while (!$result && (strpos($this->sphinx->_error, "errno=111,") !== false) && $retries--)
 		{
-			// could be connection to localhost:3312 failed (errno=111, msg=Connection refused) during rotate
-			if (strpos($this->sphinx->_error, "errno=111,") !== false)
-			{
-				// retry
-				usleep(300);
-				$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
-			}
+			usleep(CONNECT_WAIT_TIME);
+			$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
 		}
 
 		$id_ary = array();
