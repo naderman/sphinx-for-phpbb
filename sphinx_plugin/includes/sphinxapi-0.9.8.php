@@ -281,7 +281,7 @@ class SphinxClient
 	}
 
 	/// connect to searchd server
-	function _Connect ()
+	function _Connect ($allow_retry = true)
 	{
 		$errno = 0;
 		$errstr = "";
@@ -298,7 +298,22 @@ class SphinxClient
 		}
 
 		// check version
-		list(,$v) = unpack ( "N*", fread ( $fp, 4 ) );
+		//list(,$v) = unpack ( "N*", fread ( $fp, 4 ) );
+		$version_data = unpack ( "N*", fread ( $fp, 4 ) );
+		if (!isset($version_data[1]))
+		{
+			// this should not happen, try to reconnect ONCE
+			if ($allow_retry)
+			{
+				return $this->_Connect(false);
+			}
+			else
+			{
+				$this->_error = "unexpected version data";
+				return false;
+			}
+		}
+		$v = $version_data[1];
 		$v = (int)$v;
 		if ( $v<1 )
 		{

@@ -14,6 +14,8 @@
 			Sphinx (v0.9.8[.1]) has to be installed for this plugin to work.
 
 			You do NOT need to configure Sphinx. All configuration is handled through the phpBB ACP interface of the plugin.
+
+			To UPDATE from previous versions simply replace the files with the new ones. Then enter the ACP. Delete the Sphinx index under MAINTENANCE -> DATABASE -> Search index. Go to GENERAL -> SERVER CONFIGURATION -> Search Settings. Submit the page once - even if you made no changes. Then go to MAINTENANCE -> DATABASE -> Search index and create a new index for Sphinx.
 		</author-notes>
 		
 		<author-group>
@@ -24,7 +26,7 @@
 			</author>
 		</author-group>
 		
-		<mod-version>1.0.beta1</mod-version>
+		<mod-version>1.0.beta2</mod-version>
 		
 		<installation>
 			<level>easy</level>
@@ -33,6 +35,23 @@
 		</installation>
 
 		<history>
+			<entry>
+				<date>2008-11-07</date>
+				<rev-version>1.0.beta2</rev-version>
+				<changelog lang="en">
+					<change>check log/write_test not logwrite_test</change>
+					<change>restart searchd after config change</change>
+					<change>max matches = 200000</change>
+					<change>avoid a NOTICE on failed connection</change>
+					<change>sphinx does not handle index updates through attribute updates ...</change>
+					<change>make sure the values are integers and not strings</change>
+					<change>sort topics by last_post_time, retry connecting on connection refused</change>
+					<change>sort groups rather than elements of groups</change>
+					<change>retry connecting multiple times</change>
+					<change>locate pidof rather than assume it is in path</change>
+					<change>allow choosing the indexer memory limit in the ACP</change>
+				</changelog>
+			</entry>
 			<entry>
 				<date>2008-11-01</date>
 				<rev-version>1.0.beta1</rev-version>
@@ -53,10 +72,11 @@
 		</copy>
 
 		<diy-instructions lang="en">
-			Go to the ACP.
-			Configure and enable the plugin under GENERAL -> SERVER CONFIGURATION -> Search Settings.
+Go to the ACP.
+Configure and enable the plugin under GENERAL -> SERVER CONFIGURATION -> Search Settings.
+Then create an index under MAINTENANCE -> DATABASE -> Search index.
 
-			This package also comes with an optional english stopwords file in the config folder. See the ACP for instructions on what to do with it.
+This package also comes with an optional english stopwords file in the config folder. See the ACP for instructions on what to do with it.
 		</diy-instructions>
 		
 	</action-group>

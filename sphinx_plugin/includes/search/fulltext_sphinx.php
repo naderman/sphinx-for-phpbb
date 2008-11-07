@@ -23,6 +23,10 @@ define('INDEXER_NAME', 'indexer');
 define('SEARCHD_NAME', 'searchd');
 define('SPHINX_TABLE', table_prefix() . 'sphinx');
 
+define('MAX_MATCHES', 20000);
+define('CONNECT_RETRIES', 3);
+define('CONNECT_WAIT_TIME', 300);
+
 /**
 * Returns the global table prefix
 * This function is necessary as this file is sometimes included from within a
@@ -143,7 +147,7 @@ class fulltext_sphinx
 			}
 		}
 
-		$writable_paths = array($config['fulltext_sphinx_config_path'], $config['fulltext_sphinx_data_path'], $config['fulltext_sphinx_data_path'] . 'log');
+		$writable_paths = array($config['fulltext_sphinx_config_path'], $config['fulltext_sphinx_data_path'], $config['fulltext_sphinx_data_path'] . 'log/');
 
 		foreach ($writable_paths as $i => $path)
 		{
@@ -217,6 +221,7 @@ class fulltext_sphinx
 						p.post_subject,
 						p.post_subject as title,
 						p.post_text as data,
+						t.topic_last_post_time,
 						0 as deleted
 					FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
 					WHERE
@@ -231,6 +236,7 @@ class fulltext_sphinx
 				array('sql_attr_bool',				'topic_first_post'),
 				array('sql_attr_bool',				'deleted'),
 				array('sql_attr_timestamp'	,		'post_time'),
+				array('sql_attr_timestamp'	,		'topic_last_post_time'),
 				array('sql_attr_str2ordinal',		'post_subject'),
 			),
 			"source source_phpbb_{$this->id}_delta : source_phpbb_{$this->id}_main" => array(
@@ -247,6 +253,7 @@ class fulltext_sphinx
 						p.post_subject,
 						p.post_subject as title,
 						p.post_text as data,
+						t.topic_last_post_time,
 						0 as deleted
 					FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
 					WHERE
@@ -270,7 +277,7 @@ class fulltext_sphinx
 				array('source',						"source_phpbb_{$this->id}_delta"),
 			),
 			'indexer' => array(
-				array('mem_limit',					'512M'),
+				array('mem_limit',					$config['fulltext_sphinx_indexer_mem_limit'] . 'M'),
 			),
 			'searchd' => array(
 				array('address'	,					'127.0.0.1'),
@@ -280,7 +287,7 @@ class fulltext_sphinx
 				array('read_timeout',				'5'),
 				array('max_children',				'30'),
 				array('pid_file',					$config['fulltext_sphinx_data_path'] . "searchd.pid"),
-				array('max_matches',				'1000'),
+				array('max_matches',				(string) MAX_MATCHES),
 			),
 		);
 
@@ -327,6 +334,7 @@ class fulltext_sphinx
 
 		set_config('fulltext_sphinx_configured', '1');
 
+		$this->shutdown_searchd();
 		$this->tidy();
 
 		return false;
@@ -400,25 +408,46 @@ class fulltext_sphinx
 		$join_topic = ($type == 'posts') ? false : true;
 
 		// sorting
-		$sql_sort = $sort_by_sql[$sort_key] . (($sort_dir == 'a') ? ' ASC' : ' DESC');
-		$sql_sort_table = $sql_sort_join = '';
 
-		switch ($sort_key)
+		if ($type == 'topics')
 		{
-			case 'a':
-				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'poster_id');
-			break;
-			case 'f':
-				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'forum_id');
-			break;
-			case 'i':
-			case 's':
-				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_subject');
-			break;
-			case 't':
-			default:
-				$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_time');
-			break;
+			switch ($sort_key)
+			{
+				case 'a':
+					$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR, 'poster_id ' . (($sort_dir == 'a') ? 'ASC' : 'DESC'));
+				break;
+				case 'f':
+					$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR, 'forum_id ' . (($sort_dir == 'a') ? 'ASC' : 'DESC'));
+				break;
+				case 'i':
+				case 's':
+					$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR, 'post_subject ' . (($sort_dir == 'a') ? 'ASC' : 'DESC'));
+				break;
+				case 't':
+				default:
+					$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR, 'topic_last_post_time ' . (($sort_dir == 'a') ? 'ASC' : 'DESC'));
+				break;
+			}
+		}
+		else
+		{
+			switch ($sort_key)
+			{
+				case 'a':
+					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'poster_id');
+				break;
+				case 'f':
+					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'forum_id');
+				break;
+				case 'i':
+				case 's':
+					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_subject');
+				break;
+				case 't':
+				default:
+					$this->sphinx->SetSortMode(($sort_dir == 'a') ? SPH_SORT_ATTR_ASC : SPH_SORT_ATTR_DESC, 'post_time');
+				break;
+			}
 		}
 
 		// most narrow filters first
@@ -477,13 +506,17 @@ class fulltext_sphinx
 
 		$this->sphinx->SetFilter('deleted', array(0));
 
-		if ($type == 'topics')
+		$this->sphinx->SetLimits($start, (int) $per_page, MAX_MATCHES);
+		$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
+
+		// could be connection to localhost:3312 failed (errno=111, msg=Connection refused) during rotate, retry if so
+		$retries = CONNECT_RETRIES;
+		while (!$result && (strpos($this->sphinx->_error, "errno=111,") !== false) && $retries--)
 		{
-			$this->sphinx->SetGroupBy('topic_id', SPH_GROUPBY_ATTR);
+			usleep(CONNECT_WAIT_TIME);
+			$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
 		}
 
-		$this->sphinx->SetLimits($start, (int) $per_page);
-		$result = $this->sphinx->Query($search_query_prefix . str_replace('&quot;', '"', $this->search_query), $this->indexes);
 		$id_ary = array();
 		if (isset($result['matches']))
 		{
@@ -555,11 +588,32 @@ class fulltext_sphinx
 	 */
 	function index($mode, $post_id, &$message, &$subject, $poster_id, $forum_id)
 	{
-		global $config;
+		global $config, $db;
 
 		if ($mode == 'edit')
 		{
-			$this->sphinx->UpdateAttributes($this->indexes, array('forum_id', 'title', 'data', 'poster_id'), array($post_id => array($forum_id, $subject, $message, $poster_id)));
+			$this->sphinx->UpdateAttributes($this->indexes, array('forum_id', 'poster_id'), array((int)$post_id => array((int)$forum_id, (int)$poster_id)));
+		}
+		else if ($mode != 'post' && $post_id)
+		{
+			// update topic_last_post_time for full topic
+			$sql = 'SELECT p2.post_id
+				FROM ' . POSTS_TABLE . ' p1 LEFT JOIN ' . POSTS_TABLE . ' p2 ON (p1.topic_id = p2.topic_id)
+				WHERE p2.post_id = ' . $post_id;
+			$result = $db->sql_query($sql);
+
+			$post_updates = array();
+			$post_time = time();
+			while ($row = $db->sql_fetchrow($result))
+			{
+				$post_updates[(int)$row['post_id']] = array((int) $post_time);
+			}
+			$db->sql_freeresult($result);
+
+			if (sizeof($post_updates))
+			{
+				$this->sphinx->UpdateAttributes($this->indexes, array('topic_last_post_time'), $post_updates);
+			}
 		}
 
 		if ($this->index_created())
@@ -725,7 +779,16 @@ class fulltext_sphinx
 			if ($pid)
 			{
 				$output = array();
-				exec('pidof searchd', $output);
+				$pidof_command = 'pidof';
+
+				exec('whereis -b pidof', $output);
+				if (sizeof($output) > 1)
+				{
+					$output = explode(' ', $output[0]);
+					$pidof_command = $output[1]; // 0 is pidof:
+				}
+
+				exec($pidof_command . ' ' . SEARCHD_NAME, $output);
 				if ($output && $output[0] == $pid)
 				{
 					return true;
@@ -820,13 +883,23 @@ class fulltext_sphinx
 			'fulltext_sphinx_bin_path' => 'string',
 			'fulltext_sphinx_port' => 'int',
 			'fulltext_sphinx_stopwords'	=> 'bool',
+			'fulltext_sphinx_indexer_mem_limit' => 'int',
+		);
+
+		$defaults = array(
+			'fulltext_sphinx_indexer_mem_limit' => '512',
 		);
 
 		foreach ($config_vars as $config_var => $type)
 		{
 			if (!isset($config[$config_var]))
 			{
-				set_config($config_var, '');
+				$default = '';
+				if (isset($defaults[$config_var]))
+				{
+					$default = $defaults[$config_var];
+				}
+				set_config($config_var, $default);
 			}
 		}
 
@@ -846,7 +919,7 @@ class fulltext_sphinx
 			else
 			{
 				$output = array();
-				if (!@exec('whereis indexer', $output))
+				if (!@exec('whereis -b ' . INDEXER_NAME, $output))
 				{
 					return array(
 						'tpl' => $user->lang['FULLTEXT_SPHINX_REQUIRES_EXEC'],
@@ -911,6 +984,10 @@ class fulltext_sphinx
 		<dl>
 			<dt><label for="fulltext_sphinx_port">' . $user->lang['FULLTEXT_SPHINX_PORT'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_PORT_EXPLAIN'] . '</span></dt>
 			<dd><input id="fulltext_sphinx_port" type="text" size="4" maxlength="10" name="config[fulltext_sphinx_port]" value="' . $config['fulltext_sphinx_port'] . '" /></dd>
+		</dl>
+		<dl>
+			<dt><label for="fulltext_sphinx_indexer_mem_limit">' . $user->lang['FULLTEXT_SPHINX_INDEXER_MEM_LIMIT'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_INDEXER_MEM_LIMIT_EXPLAIN'] . '</span></dt>
+			<dd><input id="fulltext_sphinx_indexer_mem_limit" type="text" size="4" maxlength="10" name="config[fulltext_sphinx_indexer_mem_limit]" value="' . $config['fulltext_sphinx_indexer_mem_limit'] . '" />' . $user->lang['MIB'] . '</dd>
 		</dl>
 		';
 
