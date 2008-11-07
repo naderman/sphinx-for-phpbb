@@ -277,7 +277,7 @@ class fulltext_sphinx
 				array('source',						"source_phpbb_{$this->id}_delta"),
 			),
 			'indexer' => array(
-				array('mem_limit',					'512M'),
+				array('mem_limit',					$config['fulltext_sphinx_indexer_mem_limit'] . 'M'),
 			),
 			'searchd' => array(
 				array('address'	,					'127.0.0.1'),
@@ -883,13 +883,23 @@ class fulltext_sphinx
 			'fulltext_sphinx_bin_path' => 'string',
 			'fulltext_sphinx_port' => 'int',
 			'fulltext_sphinx_stopwords'	=> 'bool',
+			'fulltext_sphinx_indexer_mem_limit' => 'int',
+		);
+
+		$defaults = array(
+			'fulltext_sphinx_indexer_mem_limit' => '512',
 		);
 
 		foreach ($config_vars as $config_var => $type)
 		{
 			if (!isset($config[$config_var]))
 			{
-				set_config($config_var, '');
+				$default = '';
+				if (isset($defaults[$config_var]))
+				{
+					$default = $defaults[$config_var];
+				}
+				set_config($config_var, $default);
 			}
 		}
 
@@ -974,6 +984,10 @@ class fulltext_sphinx
 		<dl>
 			<dt><label for="fulltext_sphinx_port">' . $user->lang['FULLTEXT_SPHINX_PORT'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_PORT_EXPLAIN'] . '</span></dt>
 			<dd><input id="fulltext_sphinx_port" type="text" size="4" maxlength="10" name="config[fulltext_sphinx_port]" value="' . $config['fulltext_sphinx_port'] . '" /></dd>
+		</dl>
+		<dl>
+			<dt><label for="fulltext_sphinx_indexer_mem_limit">' . $user->lang['FULLTEXT_SPHINX_INDEXER_MEM_LIMIT'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_INDEXER_MEM_LIMIT_EXPLAIN'] . '</span></dt>
+			<dd><input id="fulltext_sphinx_indexer_mem_limit" type="text" size="4" maxlength="10" name="config[fulltext_sphinx_indexer_mem_limit]" value="' . $config['fulltext_sphinx_indexer_mem_limit'] . '" />' . $user->lang['MIB'] . '</dd>
 		</dl>
 		';
 
