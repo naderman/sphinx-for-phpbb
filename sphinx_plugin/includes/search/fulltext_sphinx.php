@@ -779,7 +779,16 @@ class fulltext_sphinx
 			if ($pid)
 			{
 				$output = array();
-				exec('pidof ' . SEARCHD_NAME, $output);
+				$pidof_command = 'pidof';
+
+				exec('whereis -b pidof', $output);
+				if (sizeof($output) > 1)
+				{
+					$output = explode(' ', $output[0]);
+					$pidof_command = $output[1]; // 0 is pidof:
+				}
+
+				exec($pidof_command . ' ' . SEARCHD_NAME, $output);
 				if ($output && $output[0] == $pid)
 				{
 					return true;
@@ -900,7 +909,7 @@ class fulltext_sphinx
 			else
 			{
 				$output = array();
-				if (!@exec('whereis ' . INDEXER_NAME, $output))
+				if (!@exec('whereis -b ' . INDEXER_NAME, $output))
 				{
 					return array(
 						'tpl' => $user->lang['FULLTEXT_SPHINX_REQUIRES_EXEC'],
