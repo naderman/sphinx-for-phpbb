@@ -56,7 +56,7 @@ class fulltext_sphinx
 		global $config;
 
 		$this->id = $config['avatar_salt'];
-		$this->indexes = 'index_phpbb_' . $this->id . '_main;index_phpbb_' . $this->id . '_delta';
+		$this->indexes = 'index_phpbb_' . $this->id . '_delta;index_phpbb_' . $this->id . '_main';
 
 		$this->sphinx = new SphinxClient ();
 
@@ -216,7 +216,7 @@ class fulltext_sphinx
 						p.forum_id,
 						p.topic_id,
 						p.poster_id,
-						IF (p.post_id = t.topic_first_post_id, 1, 0) as topic_first_post,
+						IF(p.post_id = t.topic_first_post_id, 1, 0) as topic_first_post,
 						p.post_time,
 						p.post_subject,
 						p.post_subject as title,
@@ -248,7 +248,7 @@ class fulltext_sphinx
 						p.forum_id,
 						p.topic_id,
 						p.poster_id,
-						IF (p.post_id = t.topic_first_post_id, 1, 0) as topic_first_post,
+						IF(p.post_id = t.topic_first_post_id, 1, 0) as topic_first_post,
 						p.post_time,
 						p.post_subject,
 						p.post_subject as title,
@@ -291,7 +291,8 @@ class fulltext_sphinx
 			),
 		);
 
-		$non_unique = array('sql_group_column' => true, 'sql_date_column' => true, 'sql_str2ordinal_column' => true, 'sql_attr_uint' => true, 'sql_attr_timestamp' => true, 'sql_attr_str2ordinal' => true);
+		$non_unique = array('sql_attr_uint' => true, 'sql_attr_timestamp' => true, 'sql_attr_str2ordinal' => true, 'sql_attr_bool' => true);
+		$delete = array('sql_group_column' => true, 'sql_date_column' => true, 'sql_str2ordinal_column' => true);
 
 		foreach ($config_data as $section_name => $section_data)
 		{
@@ -299,6 +300,11 @@ class fulltext_sphinx
 			if (!$section)
 			{
 				$section = &$config_object->add_section($section_name);
+			}
+
+			foreach ($delete as $key => $void)
+			{
+				$section->delete_variables_by_name($key);
 			}
 
 			foreach ($non_unique as $key => $void)
@@ -467,8 +473,9 @@ class fulltext_sphinx
 					$search_query_prefix = '@title ';
 				}
 				$this->sphinx->SetFieldWeights(array("title" => 5, "data" => 1)); // weight for the title
-				$this->sphinx->SetFilter('topic_first_post', array(1)); // 1 is first_post, 2 is not first post
-				break;
+				$this->sphinx->SetFilter('topic_first_post', array(1)); // 1 is first_post, 0 is not first post
+			break;
+
 			case 'msgonly':
 				// only search the body
 				if ($terms == 'all')
@@ -476,14 +483,16 @@ class fulltext_sphinx
 					$search_query_prefix = '@data ';
 				}
 				$this->sphinx->SetFieldWeights(array("title" => 1, "data" => 5)); // weight for the body
-				break;
+			break;
+
 			case 'firstpost':
 				$this->sphinx->SetFieldWeights(array("title" => 5, "data" => 1)); // more relative weight for the title, also search the body
-				$this->sphinx->SetFilter('topic_first_post', array(1)); // 1 is first_post, 2 is not first post
-				break;
+				$this->sphinx->SetFilter('topic_first_post', array(1)); // 1 is first_post, 0 is not first post
+			break;
+
 			default:
 				$this->sphinx->SetFieldWeights(array("title" => 5, "data" => 1)); // more relative weight for the title, also search the body
-				break;
+			break;
 		}
 
 		if (sizeof($author_ary))
