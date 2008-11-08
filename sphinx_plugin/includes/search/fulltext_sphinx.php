@@ -775,7 +775,7 @@ class fulltext_sphinx
 
 		if (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
 		{
-			$pid = file_get_contents($config['fulltext_sphinx_data_path'] . 'searchd.pid');
+			$pid = trim(file_get_contents($config['fulltext_sphinx_data_path'] . 'searchd.pid'));
 			if ($pid)
 			{
 				$output = array();
@@ -789,7 +789,7 @@ class fulltext_sphinx
 				}
 
 				exec($pidof_command . ' ' . SEARCHD_NAME, $output);
-				if (sizeof($output) && ($output[0] == $pid || $output[1] == $pid))
+				if (sizeof($output) && (trim($output[0]) == $pid || trim($output[1]) == $pid))
 				{
 					return true;
 				}
