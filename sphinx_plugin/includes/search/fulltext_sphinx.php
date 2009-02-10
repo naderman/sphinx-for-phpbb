@@ -1,10 +1,10 @@
 <?php
-/** 
+/**
 *
 * @package search
 * @version $Id$
-* @copyright (c) 2005 phpBB Group 
-* @license http://opensource.org/licenses/gpl-license.php GNU Public License 
+* @copyright (c) 2005 phpBB Group
+* @license http://opensource.org/licenses/gpl-license.php GNU Public License
 *
 */
 
@@ -32,7 +32,8 @@ define('CONNECT_WAIT_TIME', 300);
 * This function is necessary as this file is sometimes included from within a
 * function and table_prefix is in global space.
 */
-function table_prefix() {
+function table_prefix()
+{
 	global $table_prefix;
 	return $table_prefix;
 }
@@ -60,17 +61,19 @@ class fulltext_sphinx
 
 		$this->sphinx = new SphinxClient ();
 
-		if (isset($config['fulltext_sphinx_configured']) && $config['fulltext_sphinx_configured'])
+		if (!empty($config['fulltext_sphinx_configured']))
 		{
-			if (!file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid') && $this->index_created(false))
+			if (@is_readable($config['fulltext_sphinx_data_path']) && file_exists($config['fulltext_sphinx_data_path']) && !file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid') && $this->index_created(false))
 			{
 				$this->shutdown_searchd();
-				$cwd = getcwd();
-				chdir($config['fulltext_sphinx_bin_path']);
-				exec('./' . SEARCHD_NAME . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf >> ' . $config['fulltext_sphinx_data_path'] . 'log/searchd-startup.log 2>&1 &');
-				chdir($cwd);
+//				$cwd = getcwd();
+//				chdir($config['fulltext_sphinx_bin_path']);
+				exec($config['fulltext_sphinx_bin_path'] . SEARCHD_NAME . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf >> ' . $config['fulltext_sphinx_data_path'] . 'log/searchd-startup.log 2>&1 &');
+//				chdir($cwd);
 			}
-			$this->sphinx->SetServer("localhost", (isset($config['fulltext_sphinx_port']) && $config['fulltext_sphinx_port']) ? (int) $config['fulltext_sphinx_port'] : 3312); // we only support localhost for now
+
+			// we only support localhost for now
+			$this->sphinx->SetServer('localhost', (isset($config['fulltext_sphinx_port']) && $config['fulltext_sphinx_port']) ? (int) $config['fulltext_sphinx_port'] : 3312);
 		}
 
 		$config['fulltext_sphinx_min_word_len'] = 2;
@@ -115,6 +118,7 @@ class fulltext_sphinx
 			{
 				return $user->lang['FULLTEXT_SPHINX_UNCONFIGURED'];
 			}
+
 			if ($config[$path] && substr($config[$path], -1) != '/')
 			{
 				set_config($path, $config[$path] . '/');
@@ -128,12 +132,13 @@ class fulltext_sphinx
 
 		foreach ($executables as $executable)
 		{
-			if (!file_exists($executable))
+			if (!@is_readable($executable) || !file_exists($executable))
 			{
 				return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_FOUND'], $executable);
 			}
 
-			if (!function_exists('exec')) {
+			if (!function_exists('exec'))
+			{
 				return $user->lang['FULLTEXT_SPHINX_REQUIRES_EXEC'];
 			}
 
@@ -152,27 +157,28 @@ class fulltext_sphinx
 		foreach ($writable_paths as $i => $path)
 		{
 			// make sure directory exists
-			if (!file_exists($path))
+			if (!@is_readable($path) || !file_exists($path))
 			{
 				return sprintf($user->lang['FULLTEXT_SPHINX_DIRECTORY_NOT_FOUND'], $path);
 			}
-	
+
 			// now check if it is writable by storing a simple file
 			$filename = $path . 'write_test';
 			$fp = @fopen($filename, 'wb');
+
 			if ($fp === false)
 			{
 				return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_WRITABLE'], $filename);
 			}
 			@fclose($fp);
-	
+
 			@unlink($filename);
-			
+
 			if ($i == 1)
 			{
-				if (!is_dir($path . 'log'))
+				if (!@is_dir($path . 'log'))
 				{
-					mkdir($path . 'log');
+					@mkdir($path . 'log');
 				}
 			}
 		}
@@ -191,6 +197,7 @@ class fulltext_sphinx
 		{
 			$filename = $config['fulltext_sphinx_config_path'] . 'sphinx.conf';
 			$fp = @fopen($filename, 'wb');
+
 			if ($fp === false)
 			{
 				return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_WRITABLE'], $filename);
@@ -387,7 +394,7 @@ class fulltext_sphinx
 			$this->search_query = str_replace('"', '&quot;', $keywords);
 			return true;
 		}
-		
+
 		return false;
 	}
 
@@ -461,7 +468,7 @@ class fulltext_sphinx
 		{
 			$this->sphinx->SetFilter('topic_id', array($topic_id));
 		}
-		
+
 		$search_query_prefix = '';
 
 		switch($fields)
@@ -506,7 +513,7 @@ class fulltext_sphinx
 			$fid_ary = array_unique(array_intersect(array_keys($auth->acl_getf('f_read', true)), array_keys($auth->acl_getf('f_search', true))));
 			// All forums that the user wants to and can search in
 			$search_forums = array_diff($fid_ary, $ex_fid_ary);
-			
+
 			if (sizeof($search_forums))
 			{
 				$this->sphinx->SetFilter('forum_id', $search_forums);
@@ -545,7 +552,7 @@ class fulltext_sphinx
 		{
 			return false;
 		}
-		
+
 		$result_count = $result['total_found'];
 
 		$id_ary = array_slice($id_ary, 0, (int) $per_page);
@@ -628,11 +635,11 @@ class fulltext_sphinx
 		if ($this->index_created())
 		{
 			$rotate = ($this->searchd_running()) ? ' --rotate' : '';
-	
-			$cwd = getcwd();
-			chdir($config['fulltext_sphinx_bin_path']);
-			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
-			chdir($cwd);
+
+//			$cwd = getcwd();
+//			chdir($config['fulltext_sphinx_bin_path']);
+			exec($config['fulltext_sphinx_bin_path'] . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
+//			chdir($cwd);
 		}
 	}
 
@@ -647,7 +654,7 @@ class fulltext_sphinx
 			$values[$post_id] = array(1);
 		}
 
-		$this->sphinx->UpdateAttributes($this->indexes, array("deleted"), $values);
+		$this->sphinx->UpdateAttributes($this->indexes, array('deleted'), $values);
 	}
 
 	/**
@@ -660,12 +667,12 @@ class fulltext_sphinx
 		if ($this->index_created() || $create)
 		{
 			$rotate = ($this->searchd_running()) ? ' --rotate' : '';
-	
-			$cwd = getcwd();
-			chdir($config['fulltext_sphinx_bin_path']);
-			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_main >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
-			exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
-			chdir($cwd);
+
+//			$cwd = getcwd();
+//			chdir($config['fulltext_sphinx_bin_path']);
+			exec($config['fulltext_sphinx_bin_path'] . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_main >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
+			exec($config['fulltext_sphinx_bin_path'] . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
+//			chdir($cwd);
 		}
 
 		set_config('search_last_gc', time(), true);
@@ -740,17 +747,18 @@ class fulltext_sphinx
 
 		$sql = 'SHOW TABLES LIKE \'' . SPHINX_TABLE . '\'';
 		$result = $db->sql_query($sql);
+		$row = $db->sql_fetchrow($result);
+		$db->sql_freeresult($result);
 
 		$created = false;
 
-		if ($db->sql_fetchrow($result))
+		if ($row)
 		{
-			if ((file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.spd') && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.spd')) || ($allow_new_files && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.new.spd') && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.new.spd')))
+			if ((@file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.spd') && @file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.spd')) || ($allow_new_files && @file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.new.spd') && @file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.new.spd')))
 			{
 				$created = true;
 			}
 		}
-		$db->sql_freeresult($result);
 
 		return $created;
 	}
@@ -763,7 +771,7 @@ class fulltext_sphinx
 		global $config;
 
 		exec('killall -9 ' . SEARCHD_NAME . ' >> /dev/null 2>&1 &');
-		
+
 		if (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
 		{
 			unlink($config['fulltext_sphinx_data_path'] . 'searchd.pid');
@@ -782,9 +790,10 @@ class fulltext_sphinx
 	{
 		global $config;
 
-		if (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
+		if (@file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
 		{
 			$pid = trim(file_get_contents($config['fulltext_sphinx_data_path'] . 'searchd.pid'));
+
 			if ($pid)
 			{
 				$output = array();
@@ -917,11 +926,11 @@ class fulltext_sphinx
 		// try to guess the path if it is empty
 		if (empty($bin_path))
 		{
-			if (file_exists('/usr/local/bin/' . INDEXER_NAME) && file_exists('/usr/local/bin/' . SEARCHD_NAME))
+			if (@file_exists('/usr/local/bin/' . INDEXER_NAME) && file_exists('/usr/local/bin/' . SEARCHD_NAME))
 			{
 				$bin_path = '/usr/local/bin/';
 			}
-			else if (file_exists('/usr/bin/' . INDEXER_NAME) && file_exists('/usr/bin/' . SEARCHD_NAME))
+			else if (@file_exists('/usr/bin/' . INDEXER_NAME) && file_exists('/usr/bin/' . SEARCHD_NAME))
 			{
 				$bin_path = '/usr/bin/';
 			}
@@ -935,13 +944,16 @@ class fulltext_sphinx
 						'config' => array()
 					);
 				}
+
 				if (sizeof($output))
 				{
 					$output = explode(' ', $output[0]);
 					array_shift($output); // remove indexer:
+
 					foreach ($output as $path)
 					{
 						$path = dirname($path) . '/';
+
 						if (file_exists($path . INDEXER_NAME) && file_exists($path . SEARCHD_NAME))
 						{
 							$bin_path = $path;
@@ -959,7 +971,7 @@ class fulltext_sphinx
 		}
 
 		// check whether stopwords file is available and enabled
-		if (file_exists($config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt'))
+		if (@file_exists($config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt'))
 		{
 			$stopwords_available = true;
 			$stopwords_active = $config['fulltext_sphinx_stopwords'];
@@ -1060,6 +1072,6 @@ function sphinx_read_last_lines($file, $amount)
 	fclose($fp);
 
 	return $string;
-} 
+}
 
 ?>
