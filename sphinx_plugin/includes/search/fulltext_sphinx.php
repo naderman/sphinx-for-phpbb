@@ -63,7 +63,7 @@ class fulltext_sphinx
 
 		if (!empty($config['fulltext_sphinx_configured']))
 		{
-			if (@is_readable($config['fulltext_sphinx_data_path']) && file_exists($config['fulltext_sphinx_data_path']) && !file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid') && $this->index_created(false))
+			if ($config['fulltext_sphinx_autorun'] && !file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid') && $this->index_created(true))
 			{
 				$this->shutdown_searchd();
 //				$cwd = getcwd();
@@ -109,19 +109,21 @@ class fulltext_sphinx
 	{
 		global $db, $user, $config, $phpbb_root_path, $phpEx;
 
-		$paths = array('fulltext_sphinx_bin_path', 'fulltext_sphinx_config_path', 'fulltext_sphinx_data_path');
-
-		// check for completeness and add trailing slash if it's not present
-		foreach ($paths as $path)
+		if ($config['fulltext_sphinx_autoconf'])
 		{
-			if (empty($config[$path]))
-			{
-				return $user->lang['FULLTEXT_SPHINX_UNCONFIGURED'];
-			}
+			$paths = array('fulltext_sphinx_bin_path', 'fulltext_sphinx_config_path', 'fulltext_sphinx_data_path');
 
-			if ($config[$path] && substr($config[$path], -1) != '/')
+			// check for completeness and add trailing slash if it's not present
+			foreach ($paths as $path)
 			{
-				set_config($path, $config[$path] . '/');
+				if (empty($config[$path]))
+				{
+					return $user->lang['FULLTEXT_SPHINX_UNCONFIGURED'];
+				}
+				if ($config[$path] && substr($config[$path], -1) != '/')
+				{
+					set_config($path, $config[$path] . '/');
+				}
 			}
 		}
 
@@ -130,220 +132,233 @@ class fulltext_sphinx
 			$config['fulltext_sphinx_bin_path'] . SEARCHD_NAME,
 		);
 
-		foreach ($executables as $executable)
+		if ($config['fulltext_sphinx_autorun'])
 		{
-			if (!@is_readable($executable) || !file_exists($executable))
+			foreach ($executables as $executable)
 			{
-				return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_FOUND'], $executable);
-			}
-
-			if (!function_exists('exec'))
-			{
-				return $user->lang['FULLTEXT_SPHINX_REQUIRES_EXEC'];
-			}
-
-			$output = array();
-			@exec($executable, $output);
-
-			$output = implode("\n", $output);
-			if (strpos($output, 'Sphinx ') === false)
-			{
-				return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_EXECUTABLE'], $executable);
-			}
-		}
-
-		$writable_paths = array($config['fulltext_sphinx_config_path'], $config['fulltext_sphinx_data_path'], $config['fulltext_sphinx_data_path'] . 'log/');
-
-		foreach ($writable_paths as $i => $path)
-		{
-			// make sure directory exists
-			if (!@is_readable($path) || !file_exists($path))
-			{
-				return sprintf($user->lang['FULLTEXT_SPHINX_DIRECTORY_NOT_FOUND'], $path);
-			}
-
-			// now check if it is writable by storing a simple file
-			$filename = $path . 'write_test';
-			$fp = @fopen($filename, 'wb');
-
-			if ($fp === false)
-			{
-				return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_WRITABLE'], $filename);
-			}
-			@fclose($fp);
-
-			@unlink($filename);
-
-			if ($i == 1)
-			{
-				if (!@is_dir($path . 'log'))
+				if (!file_exists($executable))
 				{
-					@mkdir($path . 'log');
+					return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_FOUND'], $executable);
+				}
+
+				if (!function_exists('exec'))
+				{
+					return $user->lang['FULLTEXT_SPHINX_REQUIRES_EXEC'];
+				}
+
+				$output = array();
+				@exec($executable, $output);
+
+				$output = implode("\n", $output);
+				if (strpos($output, 'Sphinx ') === false)
+				{
+					return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_EXECUTABLE'], $executable);
 				}
 			}
 		}
 
-		include ($phpbb_root_path . 'config.' . $phpEx);
-
-		// now that we're sure everything was entered correctly, generate a config for the index
-		// we misuse the avatar_salt for this, as it should be unique ;-)
-
-		if (!class_exists('sphinx_config'))
-		{
-			include($phpbb_root_path . 'includes/functions_sphinx.php');
-		}
-
-		if (!file_exists($config['fulltext_sphinx_config_path'] . 'sphinx.conf'))
-		{
-			$filename = $config['fulltext_sphinx_config_path'] . 'sphinx.conf';
-			$fp = @fopen($filename, 'wb');
-
-			if ($fp === false)
-			{
-				return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_WRITABLE'], $filename);
-			}
-			@fclose($fp);
-		}
-
-		$config_object = new sphinx_config($config['fulltext_sphinx_config_path'] . 'sphinx.conf');
-
-		$config_data = array(
-			"source source_phpbb_{$this->id}_main" => array(
-				array('type',						'mysql'),
-				array('sql_host',					$dbhost),
-				array('sql_user',					$dbuser),
-				array('sql_pass',					$dbpasswd),
-				array('sql_db',						$dbname),
-				array('sql_port',					$dbport),
-				array('sql_query_pre',				'REPLACE INTO ' . SPHINX_TABLE . ' SELECT 1, MAX(post_id) FROM ' . POSTS_TABLE . ''),
-				array('sql_query_range',			'SELECT MIN(post_id), MAX(post_id) FROM ' . POSTS_TABLE . ''),
-				array('sql_range_step',				'5000'),
-				array('sql_query',					'SELECT
-						p.post_id AS id,
-						p.forum_id,
-						p.topic_id,
-						p.poster_id,
-						IF(p.post_id = t.topic_first_post_id, 1, 0) as topic_first_post,
-						p.post_time,
-						p.post_subject,
-						p.post_subject as title,
-						p.post_text as data,
-						t.topic_last_post_time,
-						0 as deleted
-					FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
-					WHERE
-						p.topic_id = t.topic_id
-						AND p.post_id >= $start AND p.post_id <= $end'),
-				array('sql_query_post',				''),
-				array('sql_query_post_index',		'REPLACE INTO ' . SPHINX_TABLE . ' ( counter_id, max_doc_id ) VALUES ( 1, $maxid )'),
-				array('sql_query_info',				'SELECT * FROM ' . POSTS_TABLE . ' WHERE post_id = $id'),
-				array('sql_attr_uint',				'forum_id'),
-				array('sql_attr_uint',				'topic_id'),
-				array('sql_attr_uint',				'poster_id'),
-				array('sql_attr_bool',				'topic_first_post'),
-				array('sql_attr_bool',				'deleted'),
-				array('sql_attr_timestamp'	,		'post_time'),
-				array('sql_attr_timestamp'	,		'topic_last_post_time'),
-				array('sql_attr_str2ordinal',		'post_subject'),
-			),
-			"source source_phpbb_{$this->id}_delta : source_phpbb_{$this->id}_main" => array(
-				array('sql_query_pre',				''),
-				array('sql_query_range',			''),
-				array('sql_range_step',				''),
-				array('sql_query',					'SELECT
-						p.post_id AS id,
-						p.forum_id,
-						p.topic_id,
-						p.poster_id,
-						IF(p.post_id = t.topic_first_post_id, 1, 0) as topic_first_post,
-						p.post_time,
-						p.post_subject,
-						p.post_subject as title,
-						p.post_text as data,
-						t.topic_last_post_time,
-						0 as deleted
-					FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
-					WHERE
-						p.topic_id = t.topic_id
-						AND p.post_id >=  ( SELECT max_doc_id FROM ' . SPHINX_TABLE . ' WHERE counter_id=1 )'),
-			),
-			"index index_phpbb_{$this->id}_main" => array(
-				array('path',						$config['fulltext_sphinx_data_path'] . "index_phpbb_{$this->id}_main"),
-				array('source',						"source_phpbb_{$this->id}_main"),
-				array('docinfo',					'extern'),
-				array('morphology',					'none'),
-				array('stopwords',					(file_exists($config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt') && $config['fulltext_sphinx_stopwords']) ? $config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt' : ''),
-				array('min_word_len',				'2'),
-				array('charset_type',				'utf-8'),
-				array('charset_table',				'U+FF10..U+FF19->0..9, 0..9, U+FF41..U+FF5A->a..z, U+FF21..U+FF3A->a..z, A..Z->a..z, a..z, U+0149, U+017F, U+0138, U+00DF, U+00FF, U+00C0..U+00D6->U+00E0..U+00F6, U+00E0..U+00F6, U+00D8..U+00DE->U+00F8..U+00FE, U+00F8..U+00FE, U+0100->U+0101, U+0101, U+0102->U+0103, U+0103, U+0104->U+0105, U+0105, U+0106->U+0107, U+0107, U+0108->U+0109, U+0109, U+010A->U+010B, U+010B, U+010C->U+010D, U+010D, U+010E->U+010F, U+010F, U+0110->U+0111, U+0111, U+0112->U+0113, U+0113, U+0114->U+0115, U+0115, U+0116->U+0117, U+0117, U+0118->U+0119, U+0119, U+011A->U+011B, U+011B, U+011C->U+011D, U+011D, U+011E->U+011F, U+011F, U+0130->U+0131, U+0131, U+0132->U+0133, U+0133, U+0134->U+0135, U+0135, U+0136->U+0137, U+0137, U+0139->U+013A, U+013A, U+013B->U+013C, U+013C, U+013D->U+013E, U+013E, U+013F->U+0140, U+0140, U+0141->U+0142, U+0142, U+0143->U+0144, U+0144, U+0145->U+0146, U+0146, U+0147->U+0148, U+0148, U+014A->U+014B, U+014B, U+014C->U+014D, U+014D, U+014E->U+014F, U+014F, U+0150->U+0151, U+0151, U+0152->U+0153, U+0153, U+0154->U+0155, U+0155, U+0156->U+0157, U+0157, U+0158->U+0159, U+0159, U+015A->U+015B, U+015B, U+015C->U+015D, U+015D, U+015E->U+015F, U+015F, U+0160->U+0161, U+0161, U+0162->U+0163, U+0163, U+0164->U+0165, U+0165, U+0166->U+0167, U+0167, U+0168->U+0169, U+0169, U+016A->U+016B, U+016B, U+016C->U+016D, U+016D, U+016E->U+016F, U+016F, U+0170->U+0171, U+0171, U+0172->U+0173, U+0173, U+0174->U+0175, U+0175, U+0176->U+0177, U+0177, U+0178->U+00FF, U+00FF, U+0179->U+017A, U+017A, U+017B->U+017C, U+017C, U+017D->U+017E, U+017E, U+4E00..U+9FFF'),
-				array('min_prefix_len',				'0'),
-				array('min_infix_len',				'0'),
-			),
-			"index index_phpbb_{$this->id}_delta : index_phpbb_{$this->id}_main" => array(
-				array('path',						$config['fulltext_sphinx_data_path'] . "index_phpbb_{$this->id}_delta"),
-				array('source',						"source_phpbb_{$this->id}_delta"),
-			),
-			'indexer' => array(
-				array('mem_limit',					$config['fulltext_sphinx_indexer_mem_limit'] . 'M'),
-			),
-			'searchd' => array(
-				array('address'	,					'127.0.0.1'),
-				array('port',						($config['fulltext_sphinx_port']) ? $config['fulltext_sphinx_port'] : '3312'),
-				array('log',						$config['fulltext_sphinx_data_path'] . "log/searchd.log"),
-				array('query_log',					$config['fulltext_sphinx_data_path'] . "log/sphinx-query.log"),
-				array('read_timeout',				'5'),
-				array('max_children',				'30'),
-				array('pid_file',					$config['fulltext_sphinx_data_path'] . "searchd.pid"),
-				array('max_matches',				(string) MAX_MATCHES),
-			),
+		$writable_paths = array(
+			$config['fulltext_sphinx_config_path']			=> array('config' => 'fulltext_sphinx_autoconf', 'subdir' => false),
+			$config['fulltext_sphinx_data_path']			=> array('config' => 'fulltext_sphinx_autorun', 'subdir' => 'log'),
+			$config['fulltext_sphinx_data_path'] . 'log/'	=> array('config' => 'fulltext_sphinx_autorun', 'subdir' => false),
 		);
 
-		$non_unique = array('sql_attr_uint' => true, 'sql_attr_timestamp' => true, 'sql_attr_str2ordinal' => true, 'sql_attr_bool' => true);
-		$delete = array('sql_group_column' => true, 'sql_date_column' => true, 'sql_str2ordinal_column' => true);
-
-		foreach ($config_data as $section_name => $section_data)
+		foreach ($writable_paths as $path => $info)
 		{
-			$section = &$config_object->get_section_by_name($section_name);
-			if (!$section)
+			if ($config[$info['config']])
 			{
-				$section = &$config_object->add_section($section_name);
-			}
-
-			foreach ($delete as $key => $void)
-			{
-				$section->delete_variables_by_name($key);
-			}
-
-			foreach ($non_unique as $key => $void)
-			{
-				$section->delete_variables_by_name($key);
-			}
-
-			foreach ($section_data as $entry)
-			{
-				$key = $entry[0];
-				$value = $entry[1];
-
-				if (!isset($non_unique[$key]))
+				// make sure directory exists
+				// if we could drop the @ here and figure out whether the file really
+				// doesn't exist or whether open_basedir is in effect, would be nice
+				if (!@file_exists($path))
 				{
-					$variable = &$section->get_variable_by_name($key);
-					if (!$variable)
+					return sprintf($user->lang['FULLTEXT_SPHINX_DIRECTORY_NOT_FOUND'], $path);
+				}
+		
+				// now check if it is writable by storing a simple file
+				$filename = $path . 'write_test';
+				$fp = @fopen($filename, 'wb');
+				if ($fp === false)
+				{
+					return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_WRITABLE'], $filename);
+				}
+				@fclose($fp);
+		
+				@unlink($filename);
+				
+				if ($info['subdir'] !== false)
+				{
+					if (!is_dir($path . $info['subdir']))
 					{
-						$variable = &$section->create_variable($key, $value);
+						mkdir($path . $info['subdir']);
+					}
+				}
+			}
+		}
+
+		if ($config['fulltext_sphinx_autoconf'])
+		{
+			include ($phpbb_root_path . 'config.' . $phpEx);
+
+			// now that we're sure everything was entered correctly, generate a config for the index
+			// we misuse the avatar_salt for this, as it should be unique ;-)
+
+			if (!class_exists('sphinx_config'))
+			{
+				include($phpbb_root_path . 'includes/functions_sphinx.php');
+			}
+
+			if (!file_exists($config['fulltext_sphinx_config_path'] . 'sphinx.conf'))
+			{
+				$filename = $config['fulltext_sphinx_config_path'] . 'sphinx.conf';
+				$fp = @fopen($filename, 'wb');
+				if ($fp === false)
+				{
+					return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_WRITABLE'], $filename);
+				}
+				@fclose($fp);
+			}
+
+			$config_object = new sphinx_config($config['fulltext_sphinx_config_path'] . 'sphinx.conf');
+
+			$config_data = array(
+				"source source_phpbb_{$this->id}_main" => array(
+					array('type',						'mysql'),
+					array('sql_host',					$dbhost),
+					array('sql_user',					$dbuser),
+					array('sql_pass',					$dbpasswd),
+					array('sql_db',						$dbname),
+					array('sql_port',					$dbport),
+					array('sql_query_pre',				'REPLACE INTO ' . SPHINX_TABLE . ' SELECT 1, MAX(post_id) FROM ' . POSTS_TABLE . ''),
+					array('sql_query_range',			'SELECT MIN(post_id), MAX(post_id) FROM ' . POSTS_TABLE . ''),
+					array('sql_range_step',				'5000'),
+					array('sql_query',					'SELECT
+							p.post_id AS id,
+							p.forum_id,
+							p.topic_id,
+							p.poster_id,
+							IF(p.post_id = t.topic_first_post_id, 1, 0) as topic_first_post,
+							p.post_time,
+							p.post_subject,
+							p.post_subject as title,
+							p.post_text as data,
+							t.topic_last_post_time,
+							0 as deleted
+						FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
+						WHERE
+							p.topic_id = t.topic_id
+							AND p.post_id >= $start AND p.post_id <= $end'),
+					array('sql_query_post',				''),
+					array('sql_query_post_index',		'REPLACE INTO ' . SPHINX_TABLE . ' ( counter_id, max_doc_id ) VALUES ( 1, $maxid )'),
+					array('sql_query_info',				'SELECT * FROM ' . POSTS_TABLE . ' WHERE post_id = $id'),
+					array('sql_attr_uint',				'forum_id'),
+					array('sql_attr_uint',				'topic_id'),
+					array('sql_attr_uint',				'poster_id'),
+					array('sql_attr_bool',				'topic_first_post'),
+					array('sql_attr_bool',				'deleted'),
+					array('sql_attr_timestamp'	,		'post_time'),
+					array('sql_attr_timestamp'	,		'topic_last_post_time'),
+					array('sql_attr_str2ordinal',		'post_subject'),
+				),
+				"source source_phpbb_{$this->id}_delta : source_phpbb_{$this->id}_main" => array(
+					array('sql_query_pre',				''),
+					array('sql_query_range',			''),
+					array('sql_range_step',				''),
+					array('sql_query',					'SELECT
+							p.post_id AS id,
+							p.forum_id,
+							p.topic_id,
+							p.poster_id,
+							IF(p.post_id = t.topic_first_post_id, 1, 0) as topic_first_post,
+							p.post_time,
+							p.post_subject,
+							p.post_subject as title,
+							p.post_text as data,
+							t.topic_last_post_time,
+							0 as deleted
+						FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
+						WHERE
+							p.topic_id = t.topic_id
+							AND p.post_id >=  ( SELECT max_doc_id FROM ' . SPHINX_TABLE . ' WHERE counter_id=1 )'),
+				),
+				"index index_phpbb_{$this->id}_main" => array(
+					array('path',						$config['fulltext_sphinx_data_path'] . "index_phpbb_{$this->id}_main"),
+					array('source',						"source_phpbb_{$this->id}_main"),
+					array('docinfo',					'extern'),
+					array('morphology',					'none'),
+					array('stopwords',					(file_exists($config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt') && $config['fulltext_sphinx_stopwords']) ? $config['fulltext_sphinx_config_path'] . 'sphinx_stopwords.txt' : ''),
+					array('min_word_len',				'2'),
+					array('charset_type',				'utf-8'),
+					array('charset_table',				'U+FF10..U+FF19->0..9, 0..9, U+FF41..U+FF5A->a..z, U+FF21..U+FF3A->a..z, A..Z->a..z, a..z, U+0149, U+017F, U+0138, U+00DF, U+00FF, U+00C0..U+00D6->U+00E0..U+00F6, U+00E0..U+00F6, U+00D8..U+00DE->U+00F8..U+00FE, U+00F8..U+00FE, U+0100->U+0101, U+0101, U+0102->U+0103, U+0103, U+0104->U+0105, U+0105, U+0106->U+0107, U+0107, U+0108->U+0109, U+0109, U+010A->U+010B, U+010B, U+010C->U+010D, U+010D, U+010E->U+010F, U+010F, U+0110->U+0111, U+0111, U+0112->U+0113, U+0113, U+0114->U+0115, U+0115, U+0116->U+0117, U+0117, U+0118->U+0119, U+0119, U+011A->U+011B, U+011B, U+011C->U+011D, U+011D, U+011E->U+011F, U+011F, U+0130->U+0131, U+0131, U+0132->U+0133, U+0133, U+0134->U+0135, U+0135, U+0136->U+0137, U+0137, U+0139->U+013A, U+013A, U+013B->U+013C, U+013C, U+013D->U+013E, U+013E, U+013F->U+0140, U+0140, U+0141->U+0142, U+0142, U+0143->U+0144, U+0144, U+0145->U+0146, U+0146, U+0147->U+0148, U+0148, U+014A->U+014B, U+014B, U+014C->U+014D, U+014D, U+014E->U+014F, U+014F, U+0150->U+0151, U+0151, U+0152->U+0153, U+0153, U+0154->U+0155, U+0155, U+0156->U+0157, U+0157, U+0158->U+0159, U+0159, U+015A->U+015B, U+015B, U+015C->U+015D, U+015D, U+015E->U+015F, U+015F, U+0160->U+0161, U+0161, U+0162->U+0163, U+0163, U+0164->U+0165, U+0165, U+0166->U+0167, U+0167, U+0168->U+0169, U+0169, U+016A->U+016B, U+016B, U+016C->U+016D, U+016D, U+016E->U+016F, U+016F, U+0170->U+0171, U+0171, U+0172->U+0173, U+0173, U+0174->U+0175, U+0175, U+0176->U+0177, U+0177, U+0178->U+00FF, U+00FF, U+0179->U+017A, U+017A, U+017B->U+017C, U+017C, U+017D->U+017E, U+017E, U+4E00..U+9FFF'),
+					array('min_prefix_len',				'0'),
+					array('min_infix_len',				'0'),
+				),
+				"index index_phpbb_{$this->id}_delta : index_phpbb_{$this->id}_main" => array(
+					array('path',						$config['fulltext_sphinx_data_path'] . "index_phpbb_{$this->id}_delta"),
+					array('source',						"source_phpbb_{$this->id}_delta"),
+				),
+				'indexer' => array(
+					array('mem_limit',					$config['fulltext_sphinx_indexer_mem_limit'] . 'M'),
+				),
+				'searchd' => array(
+					array('address'	,					'127.0.0.1'),
+					array('port',						($config['fulltext_sphinx_port']) ? $config['fulltext_sphinx_port'] : '3312'),
+					array('log',						$config['fulltext_sphinx_data_path'] . "log/searchd.log"),
+					array('query_log',					$config['fulltext_sphinx_data_path'] . "log/sphinx-query.log"),
+					array('read_timeout',				'5'),
+					array('max_children',				'30'),
+					array('pid_file',					$config['fulltext_sphinx_data_path'] . "searchd.pid"),
+					array('max_matches',				(string) MAX_MATCHES),
+				),
+			);
+
+			$non_unique = array('sql_attr_uint' => true, 'sql_attr_timestamp' => true, 'sql_attr_str2ordinal' => true, 'sql_attr_bool' => true);
+			$delete = array('sql_group_column' => true, 'sql_date_column' => true, 'sql_str2ordinal_column' => true);
+
+			foreach ($config_data as $section_name => $section_data)
+			{
+				$section = &$config_object->get_section_by_name($section_name);
+				if (!$section)
+				{
+					$section = &$config_object->add_section($section_name);
+				}
+
+				foreach ($delete as $key => $void)
+				{
+					$section->delete_variables_by_name($key);
+				}
+
+				foreach ($non_unique as $key => $void)
+				{
+					$section->delete_variables_by_name($key);
+				}
+
+				foreach ($section_data as $entry)
+				{
+					$key = $entry[0];
+					$value = $entry[1];
+
+					if (!isset($non_unique[$key]))
+					{
+						$variable = &$section->get_variable_by_name($key);
+						if (!$variable)
+						{
+							$variable = &$section->create_variable($key, $value);
+						}
+						else
+						{
+							$variable->set_value($value);
+						}
 					}
 					else
 					{
-						$variable->set_value($value);
+						$variable = &$section->create_variable($key, $value);
 					}
 				}
-				else
-				{
-					$variable = &$section->create_variable($key, $value);
-				}
 			}
-		}
 
-		$config_object->write($config['fulltext_sphinx_config_path'] . 'sphinx.conf');
+			$config_object->write($config['fulltext_sphinx_config_path'] . 'sphinx.conf');
+		}
 
 		set_config('fulltext_sphinx_configured', '1');
 
@@ -632,14 +647,18 @@ class fulltext_sphinx
 			}
 		}
 
-		if ($this->index_created())
+		if ($config['fulltext_sphinx_autorun'])
 		{
-			$rotate = ($this->searchd_running()) ? ' --rotate' : '';
-
-//			$cwd = getcwd();
-//			chdir($config['fulltext_sphinx_bin_path']);
-			exec($config['fulltext_sphinx_bin_path'] . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
-//			chdir($cwd);
+			if ($this->index_created())
+			{
+				$rotate = ($this->searchd_running()) ? ' --rotate' : '';
+		
+				$cwd = getcwd();
+				chdir($config['fulltext_sphinx_bin_path']);
+				exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
+				var_dump('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
+				chdir($cwd);
+			}
 		}
 	}
 
@@ -664,15 +683,18 @@ class fulltext_sphinx
 	{
 		global $config;
 
-		if ($this->index_created() || $create)
+		if ($config['fulltext_sphinx_autorun'])
 		{
-			$rotate = ($this->searchd_running()) ? ' --rotate' : '';
-
-//			$cwd = getcwd();
-//			chdir($config['fulltext_sphinx_bin_path']);
-			exec($config['fulltext_sphinx_bin_path'] . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_main >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
-			exec($config['fulltext_sphinx_bin_path'] . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
-//			chdir($cwd);
+			if ($this->index_created() || $create)
+			{
+				$rotate = ($this->searchd_running()) ? ' --rotate' : '';
+		
+				$cwd = getcwd();
+				chdir($config['fulltext_sphinx_bin_path']);
+				exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_main >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
+				exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
+				chdir($cwd);
+			}
 		}
 
 		set_config('search_last_gc', time(), true);
@@ -723,7 +745,10 @@ class fulltext_sphinx
 
 		$this->shutdown_searchd();
 
-		sphinx_unlink_by_pattern($config['fulltext_sphinx_data_path'], '#^index_phpbb_' . $this->id . '.*$#');
+		if ($config['fulltext_sphinx_autorun'])
+		{
+			sphinx_unlink_by_pattern($config['fulltext_sphinx_data_path'], '#^index_phpbb_' . $this->id . '.*$#');
+		}
 
 		if (!$this->index_created())
 		{
@@ -754,7 +779,14 @@ class fulltext_sphinx
 
 		if ($row)
 		{
-			if ((@file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.spd') && @file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.spd')) || ($allow_new_files && @file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.new.spd') && @file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.new.spd')))
+			if ($config['fulltext_sphinx_autorun'])
+			{
+				if ((file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.spd') && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.spd')) || ($allow_new_files && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_main.new.spd') && file_exists($config['fulltext_sphinx_data_path'] . 'index_phpbb_' . $this->id . '_delta.new.spd')))
+				{
+					$created = true;
+				}
+			}
+			else
 			{
 				$created = true;
 			}
@@ -770,14 +802,23 @@ class fulltext_sphinx
 	{
 		global $config;
 
-		exec('killall -9 ' . SEARCHD_NAME . ' >> /dev/null 2>&1 &');
-
-		if (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
+		if ($config['fulltext_sphinx_autorun'])
 		{
-			unlink($config['fulltext_sphinx_data_path'] . 'searchd.pid');
-		}
+			if (!function_exists('exec'))
+			{
+				set_config('fulltext_sphinx_autorun', '0');
+				return;
+			}
 
-		sphinx_unlink_by_pattern($config['fulltext_sphinx_data_path'], '#^.*\.spl$#');
+			exec('killall -9 ' . SEARCHD_NAME . ' >> /dev/null 2>&1 &');
+
+			if (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
+			{
+				unlink($config['fulltext_sphinx_data_path'] . 'searchd.pid');
+			}
+	
+			sphinx_unlink_by_pattern($config['fulltext_sphinx_data_path'], '#^.*\.spl$#');
+		}
 	}
 
 	/**
@@ -790,7 +831,13 @@ class fulltext_sphinx
 	{
 		global $config;
 
-		if (@file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
+		// if we cannot manipulate the service assume it is running
+		if (!$config['fulltext_sphinx_autorun'])
+		{
+			return true;
+		}
+
+		if (file_exists($config['fulltext_sphinx_data_path'] . 'searchd.pid'))
 		{
 			$pid = trim(file_get_contents($config['fulltext_sphinx_data_path'] . 'searchd.pid'));
 
@@ -867,22 +914,25 @@ class fulltext_sphinx
 		}
 
 		$this->stats['last_searches'] = '';
-		if (file_exists($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log'))
+		if ($config['fulltext_sphinx_autorun'])
 		{
-			$last_searches = explode("\n", utf8_htmlspecialchars(sphinx_read_last_lines($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log', 3)));
-
-			foreach($last_searches as $i => $search)
+			if (file_exists($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log'))
 			{
-				if (strpos($search, '[' . $this->indexes . ']') !== false)
+				$last_searches = explode("\n", utf8_htmlspecialchars(sphinx_read_last_lines($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log', 3)));
+	
+				foreach($last_searches as $i => $search)
 				{
-					$last_searches[$i] = str_replace('[' . $this->indexes . ']', '', $search);
+					if (strpos($search, '[' . $this->indexes . ']') !== false)
+					{
+						$last_searches[$i] = str_replace('[' . $this->indexes . ']', '', $search);
+					}
+					else
+					{
+						$last_searches[$i] = '';
+					}
 				}
-				else
-				{
-					$last_searches[$i] = '';
-				}
+				$this->stats['last_searches'] = implode("\n", $last_searches);
 			}
-			$this->stats['last_searches'] = implode("\n", $last_searches);
 		}
 	}
 
@@ -896,6 +946,8 @@ class fulltext_sphinx
 		$user->add_lang('mods/fulltext_sphinx');
 
 		$config_vars = array(
+			'fulltext_sphinx_autoconf' => 'bool',
+			'fulltext_sphinx_autorun' => 'bool',
 			'fulltext_sphinx_config_path' => 'string',
 			'fulltext_sphinx_data_path' => 'string',
 			'fulltext_sphinx_bin_path' => 'string',
@@ -905,6 +957,8 @@ class fulltext_sphinx
 		);
 
 		$defaults = array(
+			'fulltext_sphinx_autoconf' => '1',
+			'fulltext_sphinx_autorun' => '1',
 			'fulltext_sphinx_indexer_mem_limit' => '512',
 		);
 
@@ -921,31 +975,29 @@ class fulltext_sphinx
 			}
 		}
 
-		$bin_path = $config['fulltext_sphinx_bin_path'];
+		$no_autoconf	= false;
+		$no_autorun		= false;
+		$bin_path		= $config['fulltext_sphinx_bin_path'];
 
 		// try to guess the path if it is empty
 		if (empty($bin_path))
 		{
-			if (@file_exists('/usr/local/bin/' . INDEXER_NAME) && file_exists('/usr/local/bin/' . SEARCHD_NAME))
+			if (@file_exists('/usr/local/bin/' . INDEXER_NAME) && @file_exists('/usr/local/bin/' . SEARCHD_NAME))
 			{
 				$bin_path = '/usr/local/bin/';
 			}
-			else if (@file_exists('/usr/bin/' . INDEXER_NAME) && file_exists('/usr/bin/' . SEARCHD_NAME))
+			else if (@file_exists('/usr/bin/' . INDEXER_NAME) && @file_exists('/usr/bin/' . SEARCHD_NAME))
 			{
 				$bin_path = '/usr/bin/';
 			}
 			else
 			{
 				$output = array();
-				if (!@exec('whereis -b ' . INDEXER_NAME, $output))
+				if (!function_exists('exec') || null === @exec('whereis -b ' . INDEXER_NAME, $output))
 				{
-					return array(
-						'tpl' => $user->lang['FULLTEXT_SPHINX_REQUIRES_EXEC'],
-						'config' => array()
-					);
+					$no_autorun = true;
 				}
-
-				if (sizeof($output))
+				else if (sizeof($output))
 				{
 					$output = explode(' ', $output[0]);
 					array_shift($output); // remove indexer:
@@ -964,8 +1016,18 @@ class fulltext_sphinx
 			}
 		}
 
+		if ($no_autorun)
+		{
+			set_config('fulltext_sphinx_autorun', '0');
+		}
+
+		if ($no_autoconf)
+		{
+			set_config('fulltext_sphinx_autoconf', '0');
+		}
+
 		// rewrite config if fulltext sphinx is enabled
-		if (isset($config['fulltext_sphinx_configured']) && $config['fulltext_sphinx_configured'])
+		if ($config['fulltext_sphinx_autoconf'] && isset($config['fulltext_sphinx_configured']) && $config['fulltext_sphinx_configured'])
 		{
 			$this->config_updated();
 		}
@@ -985,6 +1047,14 @@ class fulltext_sphinx
 
 		$tpl = '
 		<span class="error">' . $user->lang['FULLTEXT_SPHINX_CONFIGURE_BEFORE']. '</span>
+		<dl>
+			<dt><label for="fulltext_sphinx_autoconf">' . $user->lang['FULLTEXT_SPHINX_AUTOCONF'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_AUTOCONF_EXPLAIN'] . '</span></dt>
+			<dd><label><input type="radio" id="fulltext_sphinx_autoconf" name="config[fulltext_sphinx_autoconf]" value="1"' . (($config['fulltext_sphinx_autoconf']) ? ' checked="checked"' : '') . (($no_autoconf) ? ' disabled="disabled"' : '') . ' class="radio" /> ' . $user->lang['YES'] . '</label><label><input type="radio" name="config[fulltext_sphinx_autoconf]" value="0"' . ((!$config['fulltext_sphinx_autoconf']) ? ' checked="checked"' : '') . ' class="radio" /> ' . $user->lang['NO'] . '</label></dd>
+		</dl>
+		<dl>
+			<dt><label for="fulltext_sphinx_autorun">' . $user->lang['FULLTEXT_SPHINX_AUTORUN'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_AUTORUN_EXPLAIN'] . '</span></dt>
+			<dd><label><input type="radio" id="fulltext_sphinx_autorun" name="config[fulltext_sphinx_autorun]" value="1"' . (($config['fulltext_sphinx_autorun']) ? ' checked="checked"' : '') . (($no_autorun) ? ' disabled="disabled"' : '') . ' class="radio" /> ' . $user->lang['YES'] . '</label><label><input type="radio" name="config[fulltext_sphinx_autorun]" value="0"' . ((!$config['fulltext_sphinx_autorun']) ? ' checked="checked"' : '') . ' class="radio" /> ' . $user->lang['NO'] . '</label></dd>
+		</dl>
 		<dl>
 			<dt><label for="fulltext_sphinx_config_path">' . $user->lang['FULLTEXT_SPHINX_CONFIG_PATH'] . ':</label><br /><span>' . $user->lang['FULLTEXT_SPHINX_CONFIG_PATH_EXPLAIN'] . '</span></dt>
 			<dd><input id="fulltext_sphinx_config_path" type="text" size="40" maxlength="255" name="config[fulltext_sphinx_config_path]" value="' . $config['fulltext_sphinx_config_path'] . '" /></dd>

@@ -1,0 +1,14 @@
+### Initial Index
+# Index main
+indexer --config /confpath/sphinx.conf index_phpbb_fd6de5a1b1d3da1daa823f23f0e11e8c_main >> /logpath/indexer.log 2>&1 &
+# Index delta
+indexer --config /confpath/sphinx.conf index_phpbb_fd6de5a1b1d3da1daa823f23f0e11e8c_delta >> /logpath/indexer.log 2>&1 &
+
+### Start searchd
+searchd --config /confpath/sphinx.conf >> /logpath/searchd-startup.log 2>&1 &
+
+### Seldom reindex
+# Initial index commands with --rotate before --config
+
+### Frequent reindex
+indexer --rotate --config /confpath/sphinx.conf index_phpbb_fd6de5a1b1d3da1daa823f23f0e11e8c_delta >> /logpath/indexer.log 2>&1 &

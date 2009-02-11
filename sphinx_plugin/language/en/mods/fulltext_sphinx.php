@@ -31,15 +31,19 @@ if (empty($lang) || !is_array($lang))
 // in a url you again do not need to specify an order e.g., 'Click %sHERE%s' is fine
 
 $lang = array_merge($lang, array(
+	'FULLTEXT_SPHINX_AUTOCONF'				=> 'Automatically configure Sphinx',
+	'FULLTEXT_SPHINX_AUTOCONF_EXPLAIN'		=> 'This is the easiest way to install Sphinx, just select the settings here and a config file will be written for you. This requires write permissions on the configuration folder.',
+	'FULLTEXT_SPHINX_AUTORUN'				=> 'Automatically run Sphinx',
+	'FULLTEXT_SPHINX_AUTORUN_EXPLAIN'		=> 'This is the easiest way to run Sphinx. Select the paths in this dialogue and the Sphinx daemon will be started and stopped as needed. You can also create an index from the ACP. If your PHP installation forbids the use of exec you can disable this and run Sphinx manually.',
 	'FULLTEXT_SPHINX_BIN_PATH'				=> 'Path to executables directory',
-	'FULLTEXT_SPHINX_BIN_PATH_EXPLAIN'		=> 'If this path could not be determined automatically you have to enter the path to the directory in which the sphinx executables <samp>indexer</samp> and <samp>searchd</samp> reside.',
+	'FULLTEXT_SPHINX_BIN_PATH_EXPLAIN'		=> 'Skip if autorun is disabled. If this path could not be determined automatically you have to enter the path to the directory in which the sphinx executables <samp>indexer</samp> and <samp>searchd</samp> reside.',
 	'FULLTEXT_SPHINX_CONFIG_PATH'			=> 'Path to configuration directory',
-	'FULLTEXT_SPHINX_CONFIG_PATH_EXPLAIN'	=> 'You should create this config directory outside the web accessable directories. It has to be writable by the user as which your webserver is running (often www-data or nobody).',
+	'FULLTEXT_SPHINX_CONFIG_PATH_EXPLAIN'	=> 'Skip if autoconf is disabled. You should create this config directory outside the web accessable directories. It has to be writable by the user as which your webserver is running (often www-data or nobody).',
 	'FULLTEXT_SPHINX_CONFIGURE_FIRST'		=> 'Before you create an index you have to enable and configure sphinx under GENERAL -> SERVER CONFIGURATION -> Search settings.',
 	'FULLTEXT_SPHINX_CONFIGURE_BEFORE'		=> 'Configure the following settings BEFORE activating Sphinx',
 	'FULLTEXT_SPHINX_CONFIGURE_AFTER'		=> 'The following settings do not have to be configured before activating Sphinx',
 	'FULLTEXT_SPHINX_DATA_PATH'				=> 'Path to data directory',
-	'FULLTEXT_SPHINX_DATA_PATH_EXPLAIN'	=> 'You should create this directory outside the web accessable directories. It has to be writable by the user as which your webserver is running (often www-data or nobody). It will be used to store the indexes and log files.',
+	'FULLTEXT_SPHINX_DATA_PATH_EXPLAIN'	=> 'Skip if autorun is disabled. You should create this directory outside the web accessable directories. It has to be writable by the user as which your webserver is running (often www-data or nobody). It will be used to store the indexes and log files.',
 	'FULLTEXT_SPHINX_DELTA_POSTS'			=> 'Number of posts in frequently updated delta index',
 	'FULLTEXT_SPHINX_DIRECTORY_NOT_FOUND'	=> 'The directory <strong>%s</strong> does not exist. Please correct your path settings.',
 	'FULLTEXT_SPHINX_FILE_NOT_EXECUTABLE'	=> 'The file <strong>%s</strong> is not executable for the webserver.',
@@ -55,7 +59,7 @@ $lang = array_merge($lang, array(
 	'FULLTEXT_SPHINX_UNCONFIGURED'			=> 'Please set all necessary options in the "Fulltext Sphinx" section of the previous page before you try to activate the sphinx plugin.',
 	'FULLTEXT_SPHINX_WRONG_DATABASE'		=> 'The sphinx plugin for phpBB currently only supports MySQL',
 	'FULLTEXT_SPHINX_STOPWORDS_FILE'		=> 'Stopwords activated',
-	'FULLTEXT_SPHINX_STOPWORDS_FILE_EXPLAIN'	=> 'You can place a file called sphinx_stopwords.txt containing one word in each line in your config directory. If this file is present these words will be excluded from the indexing process.',
+	'FULLTEXT_SPHINX_STOPWORDS_FILE_EXPLAIN'	=> 'This setting only works with autoconf enabled. You can place a file called sphinx_stopwords.txt containing one word in each line in your config directory. If this file is present these words will be excluded from the indexing process.',
 ));
 
 ?>
