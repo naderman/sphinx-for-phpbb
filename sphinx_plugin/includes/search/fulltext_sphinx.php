@@ -174,7 +174,7 @@ class fulltext_sphinx
 				{
 					return sprintf($user->lang['FULLTEXT_SPHINX_DIRECTORY_NOT_FOUND'], $path);
 				}
-		
+
 				// now check if it is writable by storing a simple file
 				$filename = $path . 'write_test';
 				$fp = @fopen($filename, 'wb');
@@ -183,9 +183,9 @@ class fulltext_sphinx
 					return sprintf($user->lang['FULLTEXT_SPHINX_FILE_NOT_WRITABLE'], $filename);
 				}
 				@fclose($fp);
-		
+
 				@unlink($filename);
-				
+
 				if ($info['subdir'] !== false)
 				{
 					if (!is_dir($path . $info['subdir']))
@@ -421,7 +421,7 @@ class fulltext_sphinx
 	* @param int $per_page number of ids each page is supposed to contain
 	* @return total number of results
 	*/
-	function keyword_search($type, &$fields, &$terms, &$sort_by_sql, &$sort_key, &$sort_dir, &$sort_days, &$ex_fid_ary, &$m_approve_fid_ary, &$topic_id, &$author_ary, &$id_ary, $start, $per_page)
+	function keyword_search($type, $fields, $terms, $sort_by_sql, $sort_key, $sort_dir, $sort_days, $ex_fid_ary, $m_approve_fid_ary, $topic_id, $author_ary, $author_name, &$id_ary, $start, $per_page)
 	{
 		global $config, $db, $auth;
 
@@ -595,7 +595,7 @@ class fulltext_sphinx
 	*
 	* @access	public
 	*/
-	function author_search($type, $firstpost_only, &$sort_by_sql, &$sort_key, &$sort_dir, &$sort_days, &$ex_fid_ary, &$m_approve_fid_ary, &$topic_id, &$author_ary, &$id_ary, $start, $per_page)
+	function author_search($type, $firstpost_only, $sort_by_sql, $sort_key, $sort_dir, $sort_days, $ex_fid_ary, $m_approve_fid_ary, $topic_id, $author_ary, $author_name, &$id_ary, $start, $per_page)
 	{
 		$this->search_query = '';
 
@@ -652,7 +652,7 @@ class fulltext_sphinx
 			if ($this->index_created())
 			{
 				$rotate = ($this->searchd_running()) ? ' --rotate' : '';
-		
+
 				$cwd = getcwd();
 				chdir($config['fulltext_sphinx_bin_path']);
 				exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_delta >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
@@ -688,7 +688,7 @@ class fulltext_sphinx
 			if ($this->index_created() || $create)
 			{
 				$rotate = ($this->searchd_running()) ? ' --rotate' : '';
-		
+
 				$cwd = getcwd();
 				chdir($config['fulltext_sphinx_bin_path']);
 				exec('./' . INDEXER_NAME . $rotate . ' --config ' . $config['fulltext_sphinx_config_path'] . 'sphinx.conf index_phpbb_' . $this->id . '_main >> ' . $config['fulltext_sphinx_data_path'] . 'log/indexer.log 2>&1 &');
@@ -816,7 +816,7 @@ class fulltext_sphinx
 			{
 				unlink($config['fulltext_sphinx_data_path'] . 'searchd.pid');
 			}
-	
+
 			sphinx_unlink_by_pattern($config['fulltext_sphinx_data_path'], '#^.*\.spl$#');
 		}
 	}
@@ -919,7 +919,7 @@ class fulltext_sphinx
 			if (file_exists($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log'))
 			{
 				$last_searches = explode("\n", utf8_htmlspecialchars(sphinx_read_last_lines($config['fulltext_sphinx_data_path'] . 'log/sphinx-query.log', 3)));
-	
+
 				foreach($last_searches as $i => $search)
 				{
 					if (strpos($search, '[' . $this->indexes . ']') !== false)
