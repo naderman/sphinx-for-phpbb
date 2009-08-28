@@ -1,14 +1,17 @@
 ### Initial Index
+# Replace {SALT} with your avatar salt
+# 
+
 # Index main
-indexer --config /confpath/sphinx.conf index_phpbb_fd6de5a1b1d3da1daa823f23f0e11e8c_main >> /logpath/indexer.log 2>&1 &
+indexer --config /confpath/sphinx.conf index_phpbb_{SALT}_main >> /logpath/indexer.log 2>&1 &
 # Index delta
-indexer --config /confpath/sphinx.conf index_phpbb_fd6de5a1b1d3da1daa823f23f0e11e8c_delta >> /logpath/indexer.log 2>&1 &
+indexer --config /confpath/sphinx.conf index_phpbb_{SALT}_delta >> /logpath/indexer.log 2>&1 &
 
 ### Start searchd
-searchd --config /confpath/sphinx.conf >> /logpath/searchd-startup.log 2>&1 &
+searchd --config /etc/sphinx/sphinx.conf >> /var/log/sphinx/searchd-startup.log 2>&1 &
 
 ### Seldom reindex
 # Initial index commands with --rotate before --config
 
 ### Frequent reindex
-indexer --rotate --config /confpath/sphinx.conf index_phpbb_fd6de5a1b1d3da1daa823f23f0e11e8c_delta >> /logpath/indexer.log 2>&1 &
+indexer --rotate --config /etc/sphinx/sphinx.conf index_phpbb_{SALT}_delta >> /var/log/sphinx/indexer.log 2>&1 &

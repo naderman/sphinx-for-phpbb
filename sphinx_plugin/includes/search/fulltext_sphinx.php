@@ -19,6 +19,7 @@ if (!defined('IN_PHPBB'))
 * @ignore
 */
 require($phpbb_root_path . "includes/sphinxapi-0.9.8." . $phpEx);
+
 define('INDEXER_NAME', 'indexer');
 define('SEARCHD_NAME', 'searchd');
 define('SPHINX_TABLE', table_prefix() . 'sphinx');
@@ -414,12 +415,26 @@ class fulltext_sphinx
 	}
 
 	/**
-	* Performs a search on keywords depending on display specific params.
+	* Performs a search on keywords depending on display specific params. You have to run split_keywords() first.
 	*
-	* @param array $id_ary passed by reference, to be filled with ids for the page specified by $start and $per_page, should be ordered
-	* @param int $start indicates the first index of the page
-	* @param int $per_page number of ids each page is supposed to contain
-	* @return total number of results
+	* @param	string		$type				contains either posts or topics depending on what should be searched for
+	* @param	string		$fields				contains either titleonly (topic titles should be searched), msgonly (only message bodies should be searched), firstpost (only subject and body of the first post should be searched) or all (all post bodies and subjects should be searched)
+	* @param	string		$terms				is either 'all' (use query as entered, words without prefix should default to "have to be in field") or 'any' (ignore search query parts and just return all posts that contain any of the specified words)
+	* @param	array		$sort_by_sql		contains SQL code for the ORDER BY part of a query
+	* @param	string		$sort_key			is the key of $sort_by_sql for the selected sorting
+	* @param	string		$sort_dir			is either a or d representing ASC and DESC
+	* @param	string		$sort_days			specifies the maximum amount of days a post may be old
+	* @param	array		$ex_fid_ary			specifies an array of forum ids which should not be searched
+	* @param	array		$m_approve_fid_ary	specifies an array of forum ids in which the searcher is allowed to view unapproved posts
+	* @param	int			$topic_id			is set to 0 or a topic id, if it is not 0 then only posts in this topic should be searched
+	* @param	array		$author_ary			an array of author ids if the author should be ignored during the search the array is empty
+	* @param	string		$author_name		specifies the author match, when ANONYMOUS is also a search-match
+	* @param	array		&$id_ary			passed by reference, to be filled with ids for the page specified by $start and $per_page, should be ordered
+	* @param	int			$start				indicates the first index of the page
+	* @param	int			$per_page			number of ids each page is supposed to contain
+	* @return	boolean|int						total number of results
+	*
+	* @access	public
 	*/
 	function keyword_search($type, $fields, $terms, $sort_by_sql, $sort_key, $sort_dir, $sort_days, $ex_fid_ary, $m_approve_fid_ary, $topic_id, $author_ary, $author_name, &$id_ary, $start, $per_page)
 	{
@@ -576,18 +591,19 @@ class fulltext_sphinx
 	}
 
 	/**
-	* Performs a search on an author's posts through keyword_search
+	* Performs a search on an author's posts without caring about message contents. Depends on display specific params
 	*
 	* @param	string		$type				contains either posts or topics depending on what should be searched for
 	* @param	boolean		$firstpost_only		if true, only topic starting posts will be considered
-	* @param	array		&$sort_by_sql		contains SQL code for the ORDER BY part of a query
-	* @param	string		&$sort_key			is the key of $sort_by_sql for the selected sorting
-	* @param	string		&$sort_dir			is either a or d representing ASC and DESC
-	* @param	string		&$sort_days			specifies the maximum amount of days a post may be old
-	* @param	array		&$ex_fid_ary		specifies an array of forum ids which should not be searched
-	* @param	array		&$m_approve_fid_ary	specifies an array of forum ids in which the searcher is allowed to view unapproved posts
-	* @param	int			&$topic_id			is set to 0 or a topic id, if it is not 0 then only posts in this topic should be searched
-	* @param	array		&$author_ary		an array of author ids
+	* @param	array		$sort_by_sql		contains SQL code for the ORDER BY part of a query
+	* @param	string		$sort_key			is the key of $sort_by_sql for the selected sorting
+	* @param	string		$sort_dir			is either a or d representing ASC and DESC
+	* @param	string		$sort_days			specifies the maximum amount of days a post may be old
+	* @param	array		$ex_fid_ary			specifies an array of forum ids which should not be searched
+	* @param	array		$m_approve_fid_ary	specifies an array of forum ids in which the searcher is allowed to view unapproved posts
+	* @param	int			$topic_id			is set to 0 or a topic id, if it is not 0 then only posts in this topic should be searched
+	* @param	array		$author_ary			an array of author ids
+	* @param	string		$author_name		specifies the author match, when ANONYMOUS is also a search-match
 	* @param	array		&$id_ary			passed by reference, to be filled with ids for the page specified by $start and $per_page, should be ordered
 	* @param	int			$start				indicates the first index of the page
 	* @param	int			$per_page			number of ids each page is supposed to contain
