@@ -644,8 +644,9 @@ class fulltext_sphinx
 		else if ($mode != 'post' && $post_id)
 		{
 			// update topic_last_post_time for full topic
-			$sql = 'SELECT p2.post_id
-				FROM ' . POSTS_TABLE . ' p1 LEFT JOIN ' . POSTS_TABLE . ' p2 ON (p1.topic_id = p2.topic_id)
+			$sql = 'SELECT p1.post_id
+				FROM ' . POSTS_TABLE . ' p1
+				LEFT JOIN ' . POSTS_TABLE . ' p2 ON (p1.topic_id = p2.topic_id)
 				WHERE p2.post_id = ' . $post_id;
 			$result = $db->sql_query($sql);
 
