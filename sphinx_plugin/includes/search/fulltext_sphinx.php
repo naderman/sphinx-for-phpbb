@@ -867,7 +867,7 @@ class fulltext_sphinx
 				exec('whereis -b pidof', $output);
 				if (sizeof($output) > 1)
 				{
-					$output = explode(' ', $output[0]);
+					$output = explode(' ', trim($output[0]));
 					$pidof_command = $output[1]; // 0 is pidof:
 				}
 
