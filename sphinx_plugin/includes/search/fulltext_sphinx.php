@@ -871,6 +871,7 @@ class fulltext_sphinx
 					$pidof_command = $output[1]; // 0 is pidof:
 				}
 
+				$output = array();
 				exec($pidof_command . ' ' . SEARCHD_NAME, $output);
 				if (sizeof($output) && (trim($output[0]) == $pid || trim($output[1]) == $pid))
 				{
