@@ -230,6 +230,7 @@ class fulltext_sphinx
 					array('sql_pass',					$dbpasswd),
 					array('sql_db',						$dbname),
 					array('sql_port',					$dbport),
+					array('sql_query_pre',				'SET NAMES utf8'),
 					array('sql_query_pre',				'REPLACE INTO ' . SPHINX_TABLE . ' SELECT 1, MAX(post_id) FROM ' . POSTS_TABLE . ''),
 					array('sql_query_range',			'SELECT MIN(post_id), MAX(post_id) FROM ' . POSTS_TABLE . ''),
 					array('sql_range_step',				'5000'),
@@ -313,7 +314,7 @@ class fulltext_sphinx
 				),
 			);
 
-			$non_unique = array('sql_attr_uint' => true, 'sql_attr_timestamp' => true, 'sql_attr_str2ordinal' => true, 'sql_attr_bool' => true);
+			$non_unique = array('sql_query_pre' => true, 'sql_attr_uint' => true, 'sql_attr_timestamp' => true, 'sql_attr_str2ordinal' => true, 'sql_attr_bool' => true);
 			$delete = array('sql_group_column' => true, 'sql_date_column' => true, 'sql_str2ordinal_column' => true);
 
 			foreach ($config_data as $section_name => $section_data)
