@@ -1,0 +1,8 @@
+1.0.1
+
+  - Language fixes.
+
+1.0.0
+
+  - Updated for Sphinx-for-phpBB 1.0 Beta 2 support.
+  - Add README, AUTHORS, CHANGELOG, COPYING and INSTALL files.
